@@ -382,23 +382,29 @@ summary(allTeg)
 
 # Tegula Analyses
 
-## Set-up dataframes
+## Respiration
+
+### Set-up dataframes
 ```{r teg-respo-setup, echo=FALSE}
 # merging tegula respo data
+
+## select only tegula respiration rates
 tegrespodry <- respo_dry_clean %>%
   filter(Species == "Tegula") %>% # filter out rockweeds
   mutate(ID = as.factor(ID))
 
-Teg.Sample.Info.New <- Sample.Info.New %>%
-  filter(Species == "Tegula")
+## select only tegula metadata
+Teg.Sample.Info.New.pH <- Sample.Info.New %>%
+  filter(Species == "Tegula") %>%
+  select("ID", "block", "pH", "Date", "experiment")
 
-Teg.Sample.Info.New.pH <- Teg.Sample.Info.New[, c("ID", "block", "pH", "Date")]
-
-tegrespodry <- merge(tegrespodry, Teg.Sample.Info.New.pH, by = c("ID", "block"), all.x = TRUE)
-
-tegrespodry$initial_wet_weight <- as.numeric(tegrespodry$initial_wet_weight) # making a number
-tegrespodry$temp_treatment <- as.factor(tegrespodry$temp_treatment) # making temp a factor
-
+## merge metadata and respiration rates
+tegrespodry <- merge(tegrespodry, Teg.Sample.Info.New.pH, 
+                     by = c("ID", "block", "experiment"), all.x = TRUE) %>%
+              # making wet a number
+               mutate(initial_wet_weight = as.numeric(initial_wet_weight)) %>%
+              # making temp a factor
+               mutate(temp_treatment = as.factor(temp_treatment))
 ```
 
 ### Initial size difference
@@ -471,238 +477,30 @@ initialsizeplot + initialshellplot + plot_layout(guides = "collect", axes = "col
 #ggsave("initial snails.png", path=here("Output"), width = 10, height = 5)
 ```
 
-## Growth - potentially delete
+### Subsetting snail sizes
+```{r snail-subset}
+# sub-sample for the general range of late spring
 
-### Change in mass
-```{r}
-#tegrespodry$end_date <- as.Date(tegrespodry$Date, format = "%Y%m%d")
-#tegrespodry$start_date <- as.Date("2025-02-17")
+summary(tegulaSizes %>% 
+          filter(experiment == "Early spring"))
 
-# calculate growth rate (change in wet weight over 28 days)
-tegrespodry$growth_rate <- (tegrespodry$wet_weight - tegrespodry$initial_wet_weight) / 28 #g/d/individual
-growth_model <- lm(growth_rate ~ pH + temp_treatment, data = tegrespodry)
-summary(growth_model)
-tegrespodry %>%
-  ggplot(aes(x=pH, y=growth_rate, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Growth~Rate))
+summary(tegulaSizes %>% 
+          filter(experiment == "Late spring"))
+# one outlier, but otherwise largest snail is 0.0516
+
+tegresposubdf <- tegrespodry %>%
+  filter(dry_weight <= 0.0516)
 ```
 
-### Shell Growth
-```{r}
-## April experiment
-# calculate shell growth as final - initial / initial
-aprilTeg <- aprilTeg %>%
-  filter(!is.na(shell_length_mm) & shell_length_mm != 0) %>%  # remove NAs
-  mutate(shell_length_growth = (shell_length2 - shell_length_mm) / shell_length_mm)
-
-# model against ph and temp
-shell_length_model <- lm(shell_length_growth ~ pH * factor(temp), data = aprilTeg)
-anova(shell_length_model) # pH significant
-
-# model with averages
-
-# calculate averages
-aprilTeg_avg <- aprilTeg %>%
-  group_by(pH, temp) %>%  # group by temp and pH
-  summarize(
-    avg_lgrowth_rate = mean(shell_length_growth, na.rm = TRUE)  # calculate mean growth rate
-  )
-
-# average model
-april_lgrowth_model <- lm(avg_lgrowth_rate ~ pH * factor(temp), data = aprilTeg_avg)
-anova(april_lgrowth_model) # pH significant
-
-# visualize
-aprilTeg %>%  
-  filter(!is.na(temp)) %>% 
-  ggplot(aes(x=pH, y=shell_length_growth, color = as.factor(temp)))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(April~Shell~Length~Growth))
-
-# calculate change in shell width
-aprilTeg <- aprilTeg %>%
-  filter(!is.na(shell_width_mm) & shell_width_mm != 0) %>%  # remove NAs
-  mutate(shell_width_growth = (shell_width2 - shell_width_mm) / shell_width_mm)
-
-# calculate averages 
-aprilTeg_avg <- aprilTeg %>%
-  group_by(pH, temp) %>%  # group by temp and pH
-  summarize(
-    avg_wgrowth_rate = mean(shell_width_growth, na.rm = TRUE)  # calculate mean growth rate
-  )
-
-# model against ph and temp
-shell_width_model <- lm(shell_width_growth ~ pH * factor(temp), data = aprilTeg)
-anova(shell_width_model) # pH significant
-
-# avg model
-april_wgrowth_model <- lm(avg_wgrowth_rate ~ pH * factor(temp), data = aprilTeg_avg)
-summary(april_wgrowth_model) # not significant
-
-#visualize
-aprilTeg %>%
-  filter(!is.na(temp)) %>% 
-  ggplot(aes(x=pH, y=shell_width_growth, color = as.factor(temp)))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(April~Shell~Width~Growth))
-
-## May experiment
-# calculate shell growth as final - initial / initial
-mayTeg <- mayTeg %>%
-  filter(!is.na(shell_length_mm) & shell_length_mm != 0) %>%  # remove NAs
-  mutate(shell_length_growth = (shell_length2 - shell_length_mm) / shell_length_mm)
-
-# model against ph and temp
-shell_length_model <- lm(shell_length_growth ~ pH * temp, data = mayTeg)
-anova(shell_length_model) # nothing significant
-
-# model with averages
-
-# calculate averages
-mayTeg_avg <- mayTeg %>%
-  group_by(pH, temp) %>%  # group by temp and pH
-  summarize(
-    avg_lgrowth_rate = mean(shell_length_growth, na.rm = TRUE)  # calculate mean growth rate
-  )
-
-# average model
-may_lgrowth_model <- lm(avg_lgrowth_rate ~ pH * factor(temp), data = mayTeg_avg)
-anova(may_lgrowth_model) # not significant
-
-# visualize
-mayTeg %>%  
-  filter(!is.na(temp)) %>% 
-  ggplot(aes(x=pH, y=shell_length_growth, color = as.factor(temp)))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(May~Shell~Length~Growth))
-
-# calculate change in shell width
-mayTeg <- mayTeg %>%
-  filter(!is.na(shell_width_mm) & shell_width_mm != 0) %>%  # remove NAs
-  mutate(shell_width_growth = (shell_width2 - shell_width_mm) / shell_width_mm)
-
-# calculate averages 
-mayTeg_avg <- mayTeg %>%
-  group_by(pH, temp) %>%  # group by temp and pH
-  summarize(
-    avg_wgrowth_rate = mean(shell_width_growth, na.rm = TRUE)  # calculate mean growth rate
-  )
-
-# model against ph and temp
-shell_width_model <- lm(shell_width_growth ~ pH * factor(temp), data = mayTeg)
-anova(shell_width_model) # nothing significant
-
-# avg model
-may_wgrowth_model <- lm(avg_wgrowth_rate ~ pH * factor(temp), data = mayTeg_avg)
-summary(may_wgrowth_model) # not significant
-
-#visualize
-mayTeg %>%
-  filter(!is.na(temp)) %>% 
-  ggplot(aes(x=pH, y=shell_width_growth, color = as.factor(temp)))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(May~Shell~Width~Growth))
-```
-### Condition Index for Teg
-```{r}
-# calculate condition index
-tegrespodry$CI <- tegrespodry$dry_weight/tegrespodry$dry_shell_weight*100
-
-# model April
-condition_index_model_a <- lm(CI ~ pH * temp_treatment, data = (tegrespodry %>% filter(experiment == "a")))
-anova(condition_index_model_a) # pH is significant, increases with pH
-
-tegrespodry %>% filter(experiment == "a") %>%
-  ggplot(aes(x=pH, y=CI, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
-  facet_wrap(~experiment,labeller = as_labeller(c("a" = "April", "b" = "May")))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Condition~Index))
-
-# model May
-condition_index_model_b <- lm(CI ~ pH * temp_treatment, data = (tegrespodry %>% filter(experiment == "b")))
-anova(condition_index_model_b) # not significant
-tegrespodry %>% filter(experiment == "b") %>%
-  ggplot(aes(x=pH, y=CI, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
-  facet_wrap(~experiment,labeller = as_labeller(c("a" = "April", "b" = "May")))+
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Condition~Index))
-```
-
-## Respiration
-
-### Updated analysis
+### Average models for each month
 ```{r teg-respo}
-tegrespo_avg <- tegrespodry %>%
+
+# calculate averages per treatment
+tegrespo_avg <- tegresposubdf %>%
   group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
   summarize(
     avg_res = mean(Respiration, na.rm = TRUE)  # calculate mean respo rate
   )
-
-summary(tegrespodry)
 
 # find averages by temperature to calculate % increase
 tegrespo_avgrates <- tegrespo_avg %>%
@@ -718,7 +516,7 @@ summary(avg_res_model)
 
 # april avg model
 avg_res_model_april <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "a"))
-anova(avg_res_model_april) # nothing sig
+anova(avg_res_model_april) # temp sig
 summary(avg_res_model_april)
 
 
@@ -730,20 +528,20 @@ summary(avg_res_model_may)
 # avg plot
 
 # predict using model
-tegrespodry <- tegrespodry %>%
-  mutate(predicted_res = predict(avg_res_model, newdata = tegrespodry))
+tegresposubdf <- tegresposubdf %>%
+  mutate(predicted_res = predict(avg_res_model, newdata = tegresposubdf))
 
-predictions <- predict(avg_res_model, newdata = tegrespodry, interval = "confidence")
+predictions <- predict(avg_res_model, newdata = tegresposubdf, interval = "confidence")
 
 # Add predictions and confidence intervals to calc_new
-tegrespodry <- tegrespodry %>%
+tegresposubdf <- tegresposubdf %>%
   mutate(predicted_res = predictions[, "fit"],
          lower_ci = predictions[, "lwr"],  # Lower confidence bound
          upper_ci = predictions[, "upr"])  # Upper confidence bound
 
 # avg plot
 avgtegrespoplot <- 
-tegrespodry %>%
+tegresposubdf %>%
   ggplot(aes(x = pH, y = Respiration, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
   facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
   geom_point(alpha = 0.1) + # raw data
@@ -761,116 +559,24 @@ tegrespodry %>%
        fill = expression(paste("Temperature (",degree,"C)")),
        y = expression(Respiration~rate~(mu*mol~O[2]~g^-1~hr^-1)))
 ```
-  
-## Original analysis using residuals for weight
-```{r eval = FALSE, echo = FALSE}
-tegmodel_weight <- lm(Respiration ~ dry_weight, data = tegrespodry) # predicting resp from initial weight
-#plot(tegmodel_weight)
-tegrespodry$residuals <- residuals(tegmodel_weight) #take residuals from weight prediction
-
-tegrespodry <- tegrespodry %>%
-  mutate(temp_treatment = as.factor(temp_treatment)) #making temp a factor
-
-# April
-tegmodel_res_april <- lm(residuals ~ pH * temp_treatment, data=tegrespodry %>% filter(experiment == "a"))
-#plot(tegmodel_res)
-anova(tegmodel_res_april) #model stats, temp, ph x exp, and temp x exp significant
-summary(tegmodel_res_april)
-
-# May
-tegmodel_res_may <- lm(residuals ~ pH * temp_treatment, data=tegrespodry %>% filter(experiment == "b"))
-#plot(tegmodel_res)
-anova(tegmodel_res_may) #model stats, temp, ph x exp, and temp x exp significant
-summary(tegmodel_res_may)
-
-tegrespodry %>%
-  ggplot(aes(x=pH, y=residuals, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
-  facet_wrap(~experiment,labeller = as_labeller(c("a" = "April", "b" = "May")))+
-  geom_point(alpha=0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Residuals~(mu*mol~O[2]~g^-1~hr^-1)))
-
-# ok what if we averaged
-tegrespo_avg <- tegrespodry %>%
-  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
-  summarize(
-    avg_res = mean(residuals, na.rm = TRUE)  # calculate mean respo rate
-  )
-
-#avg model
-avg_res_model <- lm(avg_res ~ pH * temp_treatment * experiment, data = tegrespo_avg)
-anova(avg_res_model) 
-summary(avg_res_model)
-
-# april avg model
-avg_res_model_april <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% mutate(temp_treatment = as.numeric(temp_treatment))%>% filter(experiment == "a"))
-anova(avg_res_model_april) # nothing sig
-summary(avg_res_model_april)
-
-# may avg model
-avg_res_model_may <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "b"))
-anova(avg_res_model_may) # temp sig
-summary(avg_res_model_may)
-
-# avg plot
-
-# predict using model
-tegrespodry <- tegrespodry %>%
-  mutate(predicted_res = predict(avg_res_model, newdata = tegrespodry))
-
-predictions <- predict(avg_res_model, newdata = tegrespodry, interval = "confidence")
-
-# Add predictions and confidence intervals to calc_new
-tegrespodry <- tegrespodry %>%
-  mutate(predicted_res = predictions[, "fit"],
-         lower_ci = predictions[, "lwr"],  # Lower confidence bound
-         upper_ci = predictions[, "upr"])  # Upper confidence bound
-
-# avg plot
-#avgtegrespoplot <- 
-tegrespodry %>%
-  ggplot(aes(x = pH, y = residuals, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
-  facet_wrap(~experiment, labeller = as_labeller(c("a" = "April", "b" = "May"))) +
-  geom_point(alpha = 0.2) + # raw data
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
-  geom_point(data = tegrespo_avg, aes(y = avg_res), 
-             color = "black", size = 2, alpha = 0.8, shape = 21) +  
-  geom_line(aes(y = predicted_res), size = 1.2) + # add model line
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Residuals~(mu*mol~O[2]~g^-1~hr^-1)))
-
-```
 
 ### Respo effect size plot
 ```{r teg-respo-plot}
 tegrespo_avg <- tegrespo_avg %>%
   ungroup() %>%
-  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
-  mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
+  # make temp a number
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% 
+  # scale the values to calculated standardized effects
+  mutate(pH_scale = as.numeric(scale(pH)), 
          temp_scale = as.numeric(scale(temp_num)))
 
-# April - run your model on the scaled data for april
+# april model using scaled data
 tegmodel_res_april <- lm(avg_res ~ pH_scale * temp_scale, data=tegrespo_avg %>% filter(experiment == "a"))
 #plot(tegmodel_res_april)
 anova(tegmodel_res_april) # nothing sig
 summary(tegmodel_res_april)
 
-# May - again in may
+# may model using scaled data
 tegmodel_res_may <- lm(avg_res ~ pH_scale * temp_scale, data=tegrespo_avg %>% filter(experiment == "b"))
 #plot(tegmodel_res)
 anova(tegmodel_res_may) # temp sig
@@ -915,22 +621,26 @@ tegrespoplot <-
         axis.text = element_text(size = 12),
         legend.text = element_text(size = 12))
 ```
-
  
 ## Calcification
 
 ### Set-up dataframe
 ```{r teg-calc-setup}
-# bring in metadata
+# create calc df
 calc_new <- calc %>%
+  # make ID a factor
   mutate(ID = as.factor(ID)) %>%
-  left_join(Teg.Sample.Info.New %>% 
+  # join with metadata
+  left_join(Teg.Sample.Info.New.pH %>% 
             dplyr::select(ID,pH,experiment)) %>%
+  # make temp and exp a factor
   mutate(temp_treatment = as.factor(temp_treatment)) %>%
-  mutate(experiment = as.factor(experiment))
+  mutate(experiment = as.factor(experiment)) %>%
+  # subset early spring data
+  filter(dry_weight < 0.0516)
 ```
 
-## Average models and plot
+### Average models and plot
 ```{r teg-calc-avg}
 # calculate averages 
 calc_avg <- calc_new %>%
@@ -1003,27 +713,9 @@ calc_new %>%
        y = expression(Calcification~rate~(mu*mol~CaCO[3]~g^-1~hr^-1)))
 ```
 
-### Shell calcification
-```{r}
-shellcalc %>%
-  filter(is.na(sample_type)) %>%
-  distinct() %>%
-  ggplot(aes(x=pH_treatment, y=umol.cm2.hr, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
-  geom_point(alpha = 1)+
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 16)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Calcification~rate~(mu*mol~CaCO[3]~hr^-1)))
-```
-
 ### Effect size plot
 ```{r teg-calc-plot}
-calc_avg<-calc_avg %>%
+calc_avg <- calc_avg %>%
   ungroup() %>%
   mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
   mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
@@ -1081,170 +773,22 @@ std_coefs %>%
         legend.text = element_text(size = 12))
 ```
 
-## Tegula subsample
-
-### Respiration
-```{r teg-respo}
-
-# sub-sample for the general range of late spring
-
-summary(tegulaSizes %>% 
-          filter(experiment == "Early spring"))
-
-summary(tegulaSizes %>% 
-          filter(experiment == "Late spring"))
-
-tegresposubdf <- tegrespodry %>%
-  filter(dry_weight < 0.0537)
-
-# calculate averages per treatment
-
-tegrespo_avg <- tegresposubdf %>%
-  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
-  summarize(
-    avg_res = mean(Respiration, na.rm = TRUE)  # calculate mean respo rate
-  )
-
-# find averages by temperature to calculate % increase
-tegrespo_avgrates <- tegrespo_avg %>%
-  group_by(experiment, temp_treatment) %>%
-  summarise(
-    mean_respo = mean(avg_res, na.rm = TRUE)
-  )
-
-# avg models
-avg_res_model <- lm(avg_res ~ pH * temp_treatment * experiment, data = tegrespo_avg)
-anova(avg_res_model) 
-summary(avg_res_model)
-
-# april avg model
-avg_res_model_april <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "a"))
-anova(avg_res_model_april) # nothing sig
-summary(avg_res_model_april)
-
-
-# may avg model
-avg_res_model_may <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "b"))
-anova(avg_res_model_may) # temp sig
-summary(avg_res_model_may)
-
-# avg plot
-
-# predict using model
-tegrespodry <- tegrespodry %>%
-  mutate(predicted_res = predict(avg_res_model, newdata = tegrespodry))
-
-predictions <- predict(avg_res_model, newdata = tegrespodry, interval = "confidence")
-
-# Add predictions and confidence intervals to calc_new
-tegrespodry <- tegrespodry %>%
-  mutate(predicted_res = predictions[, "fit"],
-         lower_ci = predictions[, "lwr"],  # Lower confidence bound
-         upper_ci = predictions[, "upr"])  # Upper confidence bound
-
-# avg plot
-#avgtegrespoplot <- 
-tegrespodry %>%
-  ggplot(aes(x = pH, y = Respiration, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
-  facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
-  geom_point(alpha = 0.1) + # raw data
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
-  geom_point(data = tegrespo_avg, aes(y = avg_res), 
-             color = "black", size = 2, alpha = 0.8, shape = 21) +  
-  geom_line(aes(y = predicted_res), size = 1.2) + # add model line
+### Shell calcification
+```{r}
+shellcalc %>%
+  filter(is.na(sample_type)) %>%
+  distinct() %>%
+  ggplot(aes(x=pH_treatment, y=umol.cm2.hr, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
+  geom_point(alpha = 1)+
   theme_bw() +
   theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
+        text = element_text(size = 16)) +
   scale_fill_manual(values = c("skyblue2", "firebrick1")) +
   scale_color_manual(values = c("skyblue2", "firebrick1")) +
   labs(x = expression(pH[T]),
        color = expression(paste("Temperature (",degree,"C)")),
        fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Respiration~rate~(mu*mol~O[2]~g^-1~hr^-1)))
-```
-
-### Calcification
-```{r teg-calc-2}
-tegcalcsubdf <- calc %>%
-  filter(dry_weight < 0.0537)
-
-# bring in metadata
-calc_new <- tegcalcsubdf %>%
-  mutate(ID = as.factor(ID)) %>%
-  left_join(Teg.Sample.Info.New %>% 
-            dplyr::select(ID,pH,experiment)) %>%
-  mutate(temp_treatment = as.factor(temp_treatment)) %>%
-  mutate(experiment = as.factor(experiment))
-
-# calculate averages 
-calc_avg <- calc_new %>%
-  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
-  summarize(
-    avg_calc = mean(umol.cm2.hr, na.rm = TRUE)  # calculate mean calc rate
-  )
-
-# find averages by temperature to calculate % increase
-calc_avgrates <- calc_avg %>%
-  group_by(experiment, temp_treatment) %>%
-  summarise(
-    mean_calc = mean(avg_calc, na.rm = TRUE)
-  )
-
-# find averages by pH to calculate % increase
-calc_avgrates <- calc_avg %>%
-  group_by(experiment, pH) %>%
-  summarise(
-    mean_calc = mean(avg_calc, na.rm = TRUE)
-  )
-
-# april avg model
-avg_calc_model_april <- lm(avg_calc ~ pH * temp_treatment, data = calc_avg %>% filter(experiment == "a"))
-anova(avg_calc_model_april) # nothing sig
-summary(avg_calc_model_april) 
-
-# may avg model
-avg_calc_model_may <- lm(avg_calc ~ pH * temp_treatment, data = calc_avg %>% filter(experiment == "b"))
-anova(avg_calc_model_may) # pH and temp sig
-summary(avg_calc_model_may) 
-
-# avg model altogether
-avg_calc_model <- lm(avg_calc ~ pH * temp_treatment * experiment, data = calc_avg)
-anova(avg_calc_model) # ph x exp, temp x exp
-summary(avg_calc_model) 
-
-# avg plot
-
-# predict using model
-calc_new <- calc_new %>%
-  mutate(predicted_calc = predict(avg_calc_model, newdata = calc_new))
-
-predictions <- predict(avg_calc_model, newdata = calc_new, interval = "confidence")
-
-# Add predictions and confidence intervals to calc_new
-calc_new <- calc_new %>%
-  mutate(predicted_calc = predictions[, "fit"],
-         lower_ci = predictions[, "lwr"],  # Lower confidence bound
-         upper_ci = predictions[, "upr"])  # Upper confidence bound
-
-# avg plot
-avgcalcplot <-
-calc_new %>%
-  ggplot(aes(x = pH, y = umol.cm2.hr, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
-  facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
-  geom_point(alpha = 0.1) + # raw data
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
-  geom_point(data = calc_avg, aes(y = avg_calc), 
-             color = "black", size = 2, alpha = 0.8, shape = 21) +  
-  geom_line(aes(y = predicted_calc), size = 1.2) + # add model line
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 14)) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-  labs(x = expression(pH[T]),
-       color = expression(paste("Temperature (",degree,"C)")),
-       fill = expression(paste("Temperature (",degree,"C)")),
-       y = expression(Calcification~rate~(mu*mol~CaCO[3]~g^-1~hr^-1)))
+       y = expression(Calcification~rate~(mu*mol~CaCO[3]~hr^-1)))
 ```
 
 # Rockweed
@@ -1799,7 +1343,9 @@ rwrespo_clean %>%
 # Patchworked Figures
 ```{r patchwork-figs}
 # standardized effect size response plots
-rwrespoplot + rwgpplot + tegrespoplot + tegcalcplot + plot_layout(guides = "collect", axes = "collect")
+rwrespoplot + rwgpplot + tegrespoplot + tegcalcplot + plot_layout(guides = "collect", axes = "collect_y")
+
+#ggsave("effect sizes.png", path=here("Output"), width = 10, height = 8)
 
 # raw response plots
 avgrwrespoplot <-
