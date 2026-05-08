@@ -33,6 +33,7 @@ library(mapdata)
 library(effectsize)
 library(ggtext)
 library(patchwork)
+library(overlapping)
 ```
 
 ```{r setup, include=FALSE}
@@ -63,6 +64,7 @@ rwfield <- read.csv(here("Data","field","rockweed_density.csv")) # rockweed dens
 rwsizefield <- read.csv(here("Data","field","rockweed_size.csv")) # rockweed size from quadrats
 tegfield <- read.csv(here("Data","field","rw_eiseni.csv")) # tegula densities from quadrats
 tegsizefield <- read.csv(here("Data","field","eiseni_size.csv")) # tegula size from quadrats
+SAS <-  read.csv(here("Data","field","SAS nutrients vs BEUTI.csv")) 
 ```
 
 # Tank data
@@ -285,6 +287,24 @@ beutidf <-
   na.omit()
 
 t.test(X34N~season, data = beutidf)
+
+# test vs sas 
+SAS %>%
+  mutate(date = as.Date(Sampling_Date, "%m/%d/%Y")) %>%
+  ggplot(aes(x = date, y = NO3)) +
+    geom_smooth(aes(x = date, y = NO3),method = "loess", 
+              color = "salmon4", size = 1) +
+    geom_smooth(aes(x = date, y = BEUTI_34),method = "loess", 
+              color = "blue", size = 1)+
+    geom_point(aes(x = date, y = NO3), color = "salmon4", alpha = 0.2) +
+    geom_point(aes(x = date, y = BEUTI_34), color = "blue", alpha = 0.2) +
+    theme_bw()+
+    theme(
+      strip.background = element_rect(fill = "white"),
+      text = element_text(size = 18),
+      legend.position = "right") +
+      labs(x = expression(Date)
+  ) 
 ```
 
 ## Field surveys
@@ -475,6 +495,9 @@ tegulaSizes %>%
 initialsizeplot + initialshellplot + plot_layout(guides = "collect", axes = "collect_x")
 
 #ggsave("initial snails.png", path=here("Output"), width = 10, height = 5)
+
+t.test(shell_length_mm~experiment, data = tegulaSizes)
+t.test(final_dry_weight~experiment, data = tegulaSizes)
 ```
 
 ### Subsetting snail sizes
@@ -490,6 +513,35 @@ summary(tegulaSizes %>%
 
 tegresposubdf <- tegrespodry %>%
   filter(dry_weight <= 0.0516)
+
+# is it still normal after subsetting?
+shapiro.test(tegresposubdf$Respiration)
+
+#try with shell length 13-15mm
+tegulaSizes_new <-bind_rows(
+  tegulaSizes %>%
+    filter(experiment == "Early spring") %>%
+    mutate(experiment = "a"),
+  tegulaSizes %>%
+    filter(experiment == "Late spring") %>%
+    mutate(experiment = "b")
+  ) %>%
+  mutate(ID = as.factor(snail_ID)) %>%
+  select(-pH, -snail_ID)
+
+tegrespodry_new <- left_join(tegrespodry, tegulaSizes_new, by = c("experiment","ID", "tank"))
+
+tegresposubdf <- tegrespodry_new %>%
+  filter(shell_length_mm >= 13 & shell_length_mm <= 15)
+
+shell_lengths <- list(a = (tegulaSizes_new %>% filter(experiment == "a"))$shell_length_mm, b = (tegulaSizes_new %>% filter(experiment == "b"))$shell_length_mm)
+
+overlap(shell_lengths, plot = TRUE)
+
+shell_lengths_sub <- list(a = (tegresposubdf %>% filter(experiment == "a"))$shell_length_mm, b = (tegresposubdf %>% filter(experiment == "b"))$shell_length_mm)
+
+overlap(shell_lengths_sub, plot = TRUE)
+
 ```
 
 ### Average models for each month
@@ -516,9 +568,9 @@ summary(avg_res_model)
 
 # april avg model
 avg_res_model_april <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "a"))
-anova(avg_res_model_april) # temp sig
+anova(avg_res_model_april) # nothing sig
 summary(avg_res_model_april)
-
+plot(avg_res_model_april)
 
 # may avg model
 avg_res_model_may <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "b"))
@@ -544,6 +596,7 @@ avgtegrespoplot <-
 tegresposubdf %>%
   ggplot(aes(x = pH, y = Respiration, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
   facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
+  scale_y_continuous(limits = c(0,80)) +
   geom_point(alpha = 0.1) + # raw data
   geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
   geom_point(data = tegrespo_avg, aes(y = avg_res), 
@@ -635,9 +688,14 @@ calc_new <- calc %>%
             dplyr::select(ID,pH,experiment)) %>%
   # make temp and exp a factor
   mutate(temp_treatment = as.factor(temp_treatment)) %>%
-  mutate(experiment = as.factor(experiment)) %>%
+  mutate(experiment = as.factor(experiment))
   # subset early spring data
-  filter(dry_weight < 0.0516)
+  # filter(dry_weight < 0.0516)
+
+calc_new <- left_join(calc_new, tegulaSizes_new, by = c("experiment","ID"))
+
+calc_new <- calc_new %>%
+  filter(shell_length_mm >= 13 & shell_length_mm <= 15)
 ```
 
 ### Average models and plot
