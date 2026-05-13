@@ -1,5 +1,5 @@
 ---
-title: "tegula.silvetia"
+title: "Asymmetric metabolic responses of rockweed and herbivorous snails reveal seasonal vulnerabilities to warming and acidification"
 author: "Tena Dhayalan"
 date: "`r Sys.Date()`"
 output: 
@@ -531,17 +531,49 @@ tegulaSizes_new <-bind_rows(
 
 tegrespodry_new <- left_join(tegrespodry, tegulaSizes_new, by = c("experiment","ID", "tank"))
 
+# filter out shell lengths between 13-15 mm
 tegresposubdf <- tegrespodry_new %>%
   filter(shell_length_mm >= 13 & shell_length_mm <= 15)
 
-shell_lengths <- list(a = (tegulaSizes_new %>% filter(experiment == "a"))$shell_length_mm, b = (tegulaSizes_new %>% filter(experiment == "b"))$shell_length_mm)
+# how much did shell length densities overlap originally?
+shell_lengths <- list(a = (tegrespodry_new %>% filter(experiment == "a"))$shell_length_mm, b = (tegulaSizes_new %>% filter(experiment == "b"))$shell_length_mm)
 
-overlap(shell_lengths, plot = TRUE)
+## density overlap graph
+overlap(shell_lengths)
+densityplot <- 
+  final.plot(shell_lengths) +
+  scale_fill_manual(values = c("#540D6E", "#0EAD69"),
+                    labels = c("Early spring", "Late Spring"))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"),
+                     labels = c("Early spring", "Late Spring"))+
+  theme(strip.text.x = element_blank())+
+  annotate("text", x = 17.25, y = 0.52, label = "0.57")+
+  labs(x = "Shell length (mm)",
+       y = "Density",
+       a = "Early spring",
+       b = "Late spring")
 
+# how much do shell length densities overlap in the 13-15 mm range?
 shell_lengths_sub <- list(a = (tegresposubdf %>% filter(experiment == "a"))$shell_length_mm, b = (tegresposubdf %>% filter(experiment == "b"))$shell_length_mm)
 
-overlap(shell_lengths_sub, plot = TRUE)
+## density overlap graph
+overlap(shell_lengths_sub)
+subsetdensityplot <- 
+  final.plot(shell_lengths_sub) +
+  scale_fill_manual(values = c("#540D6E", "#0EAD69"),
+                    labels = c("Early spring", "Late Spring"))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"),
+                     labels = c("Early spring", "Late Spring"))+
+  annotate("text", x = 14.88, y = 1.17, label = "0.69")+
+  theme(strip.text.x = element_blank())+
+  labs(x = "Shell length (mm)",
+       y = "Density",
+       a = "Early spring",
+       b = "Late spring")
 
+densityplot + subsetdensityplot + plot_layout(guides = "collect", axes = "collect")
+
+ggsave("Snail density plots.png", path = here("Output"), width = 8, height = 4)
 ```
 
 ### Average models for each month
