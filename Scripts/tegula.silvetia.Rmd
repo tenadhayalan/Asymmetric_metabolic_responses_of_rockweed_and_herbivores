@@ -573,7 +573,7 @@ subsetdensityplot <-
 
 densityplot + subsetdensityplot + plot_layout(guides = "collect", axes = "collect")
 
-ggsave("Snail density plots.png", path = here("Output"), width = 8, height = 4)
+#ggsave("Snail density plots.png", path = here("Output"), width = 8, height = 4)
 ```
 
 ### Average models for each month
@@ -721,13 +721,12 @@ calc_new <- calc %>%
   # make temp and exp a factor
   mutate(temp_treatment = as.factor(temp_treatment)) %>%
   mutate(experiment = as.factor(experiment))
-  # subset early spring data
-  # filter(dry_weight < 0.0516)
 
 calc_new <- left_join(calc_new, tegulaSizes_new, by = c("experiment","ID"))
 
 calc_new <- calc_new %>%
-  filter(shell_length_mm >= 13 & shell_length_mm <= 15)
+  filter(shell_length_mm >= 13 & shell_length_mm <= 15) %>%
+  filter(!deltaTA > mean(umol.cm2.hr, na.rm = TRUE) + 3 * sd(umol.cm2.hr, na.rm = TRUE)) 
 ```
 
 ### Average models and plot
