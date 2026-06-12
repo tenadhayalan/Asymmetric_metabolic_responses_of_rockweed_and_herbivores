@@ -206,35 +206,19 @@ temp %>%
     y = expression(paste("Temperature ",degree,"C"))
   ) 
 
-# what were temperatures before collection like?
+# what were temperatures two weeks before collection like?
 
-# early spring = 14.59, sd=1.11
+# early spring = 15.05, sd = 1.01
 temp %>%
-  filter(date >= as.Date("2024-03-22") & date <= as.Date("2024-03-29")) %>%
+  filter(date >= as.Date("2024-03-15") & date <= as.Date("2024-03-29")) %>%
            summarize(avg_temp = mean(sea_water_temperature, na.rm = TRUE), 
                      temp_sd = sd(sea_water_temperature, na.rm = TRUE))
 
-# early spring average daily max = 16.16
+# late spring = 15.91, sd = 0.51
 temp %>%
-  filter(date >= as.Date("2024-03-22") & date <= as.Date("2024-03-29")) %>%
-  group_by(date) %>%
-  summarize(dailymax = max(sea_water_temperature, na.rm = TRUE)) %>%
-  ungroup() %>%
-  summarize(avg_dailymax = mean(dailymax))
-
-# late spring = 15.97, sd=0.51
-temp %>%
-  filter(date >= as.Date("2024-05-06") & date <= as.Date("2024-05-13")) %>%
+  filter(date >= as.Date("2024-04-30") & date <= as.Date("2024-05-13")) %>%
            summarize(avg_temp = mean(sea_water_temperature, na.rm = TRUE),
                      temp_sd = sd(sea_water_temperature, na.rm = TRUE))
-
-# late spring average daily max = 16.825
-temp %>%
-  filter(date >= as.Date("2024-05-06") & date <= as.Date("2024-05-13")) %>%
-  group_by(date) %>%
-  summarize(dailymax = max(sea_water_temperature, na.rm = TRUE)) %>%
-  ungroup() %>%
-  summarize(avg_dailymax = mean(dailymax))
 
 tempdf <- temp %>%
   filter(date >= as.Date("2024-03-15") & date <= as.Date("2024-03-29")) %>%
@@ -287,6 +271,22 @@ beutidf <-
   na.omit()
 
 t.test(X34N~season, data = beutidf)
+
+# statistically compare BEUTI during experimental periods
+beutiexpdf <- 
+  beuti %>%
+    select(date, X34N) %>%
+    filter(date >= as.Date("2024-03-29") & date <= as.Date("2024-05-01")) %>%
+      mutate(season = "Early Spring") %>%
+  bind_rows(
+    beuti %>%
+      select(date,X34N) %>%
+      filter(date >= as.Date("2024-05-13") & date <= as.Date("2024-06-15")) %>%
+       mutate(season = "Late Spring")
+  ) %>%
+  na.omit()
+
+t.test(X34N~season, data = beutiexpdf)
 
 # test vs sas 
 SAS %>%
