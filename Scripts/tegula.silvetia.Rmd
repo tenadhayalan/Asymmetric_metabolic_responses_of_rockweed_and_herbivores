@@ -1432,9 +1432,11 @@ rwrespo_clean %>%
 # Patchworked Figures
 ```{r patchwork-figs}
 # standardized effect size response plots
-rwrespoplot + rwgpplot + tegrespoplot + tegcalcplot + plot_layout(guides = "collect", axes = "collect_y")
+(rwrespoplot + theme(plot.margin = unit(c(0,30,0,0), "pt"))) + rwgpplot + 
+  (tegrespoplot + theme(plot.margin = unit(c(0,30,0,0), "pt"))) + tegcalcplot + 
+  plot_layout(guides = "collect", axes = "collect_y")
 
-#ggsave("effect sizes.png", path=here("Output"), width = 10, height = 8)
+ggsave("effect sizes.png", path=here("Output"), width = 10, height = 8)
 
 # raw response plots
 avgrwrespoplot <-
