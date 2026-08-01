@@ -26,6 +26,6 @@ Warming may increase top-down effects through increased snail metabolism, while 
 By assessing physiological responses across different ecological regimes, our study advances understanding of how top-down and bottom-up processes 
 interact in intertidal ecosystems under global change.
 
-## Data
-## Scripts
-## Output
+## [Data](/Data)
+## [Scripts](/Scripts)
+## [Output](/Output)
