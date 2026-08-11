@@ -48,131 +48,19 @@ knitr::opts_chunk$set(
 #Load datasets
 calc <- read_csv(here("Data", "TA", "NEC.csv")) # calcification both months
 shellcalc <- read_csv(here("Data", "TA", "shell_NEC.csv"))
-aprilpH <- read_csv(here("Data","pH_temp","ph_temp_final_cut.csv")) # april pH
+aprilpH <- read_csv(here("Data","pH_temp","ph_temp.csv")) # april pH
 aprilcarb <- read_csv(here("Data","pH_temp","april_carb.csv")) # april background co2 parameters
 aprilTeg <- read_csv(here("Data","growth","tegula_initial_april.csv")) # april tegula
-maypH <- read_csv(here("Data","pH_temp","ph_temp_may_final.csv")) # may pH
+maypH <- read_csv(here("Data","pH_temp","ph_temp.csv")) # may pH
 maycarb <- read_csv(here("Data", "pH_temp", "may_carb.csv")) # may background co2 parameters
 mayTeg <- read_csv(here("Data","growth","tegula_initial_may.csv")) # may tegula
 Sample.Info <- read_csv(here("Data","PR_2024","Metadata_combined.csv")) # respo metadata both months
-respo_dry_clean <- read.csv(here("Data", "PR_2024","PR_final_normalized_dry_clean.csv")) # respo both months
-cn <- read.csv(here("Data", "CN ratio","cn_exp1.csv")) # C:N rockweed data
-cuti <- read.csv(here("Data","pH_temp","cuti_daily.csv")) # coastal upwelling index
+respo_dry_clean <- read.csv(here("Data", "PR_2024","Physiological_rates.csv")) # respo both months
 beuti <- read.csv(here("Data","pH_temp","beuti_daily.csv")) #biologically effective upwelling index
 temp <- read.csv(here("Data","field","san_pedro_temp_buoy.csv")) #https://data.caloos.org/#metadata/103471/station/data
 rwfield <- read.csv(here("Data","field","rockweed_density.csv")) # rockweed density from quadrats
-rwsizefield <- read.csv(here("Data","field","rockweed_size.csv")) # rockweed size from quadrats
 tegfield <- read.csv(here("Data","field","rw_eiseni.csv")) # tegula densities from quadrats
 tegsizefield <- read.csv(here("Data","field","eiseni_size.csv")) # tegula size from quadrats
-SAS <-  read.csv(here("Data","field","SAS nutrients vs BEUTI.csv")) 
-```
-
-# Tank data
-## Average tank pH
-```{r tank-pH}
-# adding pH to metadata
-Sample.Info.April <-
-  Sample.Info %>%
-  filter(experiment == "a") %>%
-  left_join(
-    aggregate(cbind(pH,TempInSitu) ~ tank, data = aprilpH, FUN = mean) %>%
-    mutate(tank = as.character(tank)), 
-    by = "tank") %>%
-  rename(temp = TempInSitu)
-
-Sample.Info.May <-
-  Sample.Info %>%
-  filter(experiment == "b") %>%
-  left_join(
-    aggregate(cbind(pH,TempInSitu) ~ tank, data = maypH, FUN = mean) %>%
-    mutate(tank = as.character(tank)), 
-    by = "tank") %>%
-  rename(temp = TempInSitu)
-
-# combine april and may
-Sample.Info.New <- bind_rows(Sample.Info.April,Sample.Info.May)
-
-# assigning factors
-Sample.Info.New <- Sample.Info.New %>%
-  mutate(BLANK = as.factor(BLANK)) %>%
-  mutate(ID = as.factor(ID)) %>%
-  mutate(dry_weight = as.numeric(dry_weight))
-```
-
-## pH and temperature graphs
-```{r tank-graphs}
-aprilpH <- aprilpH %>%
-  mutate(experiment = "Early Spring") # assigning experimental label as Early Spring
-maypH <- maypH %>%
-  mutate(experiment = "Late Spring") # assigning experimental label as Late Spring
-
-AllpHData <- bind_rows(aprilpH, maypH) #bind together
-
-# temperature graph
-AllpHData %>%
-  ggplot(aes(x=as.factor(expected_temp), y= TempInSitu, 
-             group = interaction(expected_temp,experiment), color = experiment))+
-  geom_boxplot(width = 0.5, outlier.alpha = 0.1)+
-  scale_color_manual(values = c("#540D6E", "#0a7d4c"))+
-  theme_bw()+
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 16)) +
-  labs(x = expression(paste("Target temperature (",degree,"C)")), 
-       y = expression(paste("Average tank temperature (",degree,"C)")), 
-       color = "Experiment" )
-
-# pH graph
-AllpHData %>%
-  ggplot(aes(x=expected_pH, y= pH, gro.up = interaction(expected_pH,experiment), color = experiment))+
-  geom_boxplot(width=0.1, outlier.alpha = 0.2)+
-  scale_color_manual(values = c("#540D6E", "#0a7d4c"))+
-  theme_bw()+
-  theme(strip.background = element_rect(fill = "white"),
-        text = element_text(size = 16)) +
-  labs(x = expression(Target~pH[T]), 
-       y = expression(Average~tank~pH[T]), 
-       color = "Experiment")
-```
-## Carbonate parameters & table creation
-```{r carb-table, eval = FALSE}
-aprilcarb <- aprilcarb %>%
-  mutate(experiment = "Early spring")%>% # add label for experiment
-  mutate(SampleID = as.character(SampleID))
-
-maycarb <- maycarb %>%
-  mutate(experiment = "Late spring") # add label for experiment
-
-carb <- bind_rows(aprilcarb, maycarb) # combine all
-
-# calculate means and sds for each column
-carb_summary <- carb %>%
-  group_by(experiment, SampleID) %>%
-  summarise(
-    across(where(is.numeric),
-           list(mean = ~mean(.x, na.rm = TRUE),
-                sd = ~sd(.x, na.rm = TRUE)),
-           .names = "{.col}_{.fn}") 
-  )
-
-# reformat so mean and sd are in the same column
-carb_summary <- carb_summary %>%
-  rowwise() %>%
-  mutate(
-    across(
-      ends_with("_mean"),
-      ~ {
-        base <- sub("_mean$", "", cur_column())
-        mean_val <- .x
-        sd_val <- get(paste0(base, "_sd"))
-        sprintf("%.2f ± %.2f", mean_val, sd_val)
-      },
-      .names = "{.col}_formatted"
-    )
-  ) %>%
-  ungroup() %>%
-  dplyr::select(SampleID, experiment, ends_with("_formatted"))
-
-#write.csv(carb_summary, here("Data/pH_temp/carb_summary.csv"))
 ```
 
 # Field data
@@ -189,6 +77,8 @@ ggplot()+
   geom_point(aes(x = -118.294363, y = 33.704647), color= "khaki2", size = 5)+
   coord_map()+
   theme_void()
+
+ggsave("Fig 1C.png", path=here("Output"))
 ```
 
 ## Field temperatures
@@ -205,6 +95,8 @@ temp %>%
     labs(x = expression(Date),
     y = expression(paste("Temperature ",degree,"C"))
   ) 
+
+ggsave("Fig 1B.png", path = here("Output"))
 
 # what were temperatures two weeks before collection like?
 
@@ -237,11 +129,15 @@ t.test(sea_water_temperature~season, data = tempdf)
 
 ## BEUTI
 ```{r beuti, echo=FALSE}
+
+# organize data
 beuti <- beuti %>%
   filter(year== 2024, month %in% 3:6) # dplyr::select only data from March to May 2024
 
 beuti <- beuti %>%
   mutate(date = make_date(year, month, day)) # make a column of date to combine year, month, and day
+
+# create plot
 
 beuti %>%
   ggplot(aes(x = as.factor(date), y = X34N)) +
@@ -255,6 +151,8 @@ beuti %>%
     labs(x = expression(Date),
     y = paste("Biologically Effective Upwelling \nTransport Index")
   ) 
+
+ggsave("Fig 1A.png", path=here("Output"))
 
 # statistically compare BEUTI before early and late spring
 beutidf <- 
@@ -272,39 +170,6 @@ beutidf <-
 
 t.test(X34N~season, data = beutidf)
 
-# statistically compare BEUTI during experimental periods
-beutiexpdf <- 
-  beuti %>%
-    select(date, X34N) %>%
-    filter(date >= as.Date("2024-03-29") & date <= as.Date("2024-05-01")) %>%
-      mutate(season = "Early Spring") %>%
-  bind_rows(
-    beuti %>%
-      select(date,X34N) %>%
-      filter(date >= as.Date("2024-05-13") & date <= as.Date("2024-06-15")) %>%
-       mutate(season = "Late Spring")
-  ) %>%
-  na.omit()
-
-t.test(X34N~season, data = beutiexpdf)
-
-# test vs sas 
-SAS %>%
-  mutate(date = as.Date(Sampling_Date, "%m/%d/%Y")) %>%
-  ggplot(aes(x = date, y = NO3)) +
-    geom_smooth(aes(x = date, y = NO3),method = "loess", 
-              color = "salmon4", size = 1) +
-    geom_smooth(aes(x = date, y = BEUTI_34),method = "loess", 
-              color = "blue", size = 1)+
-    geom_point(aes(x = date, y = NO3), color = "salmon4", alpha = 0.2) +
-    geom_point(aes(x = date, y = BEUTI_34), color = "blue", alpha = 0.2) +
-    theme_bw()+
-    theme(
-      strip.background = element_rect(fill = "white"),
-      text = element_text(size = 18),
-      legend.position = "right") +
-      labs(x = expression(Date)
-  ) 
 ```
 
 ## Field surveys
@@ -391,13 +256,126 @@ ggplot(tegsizefield, aes(x = shell_width)) +
 
 tegshelllengthplot + tegshellwidthplot + plot_layout(axes = "collect") # put plots together
 
-#ggsave("tegula field.png", path=here("Output"), width = 12, height = 6) # save to output folder
+ggsave("Fig S1.png", path=here("Output"), width = 12, height = 6) # save to output folder
 
 # determine range actually collected
 allTeg <- bind_rows(aprilTeg, mayTeg) %>%
   filter(!is.na(shell_length2)) # get rid of extra snails not placed in tanks
 
 summary(allTeg)
+```
+# Experimental tank data
+
+## Average tank pH
+```{r tank-pH}
+# adding pH to metadata
+Sample.Info.April <-
+  Sample.Info %>%
+  filter(experiment == "a") %>%
+  left_join(
+    aggregate(cbind(pH,TempInSitu) ~ tank, data = aprilpH, FUN = mean) %>%
+    mutate(tank = as.character(tank)), 
+    by = "tank") %>%
+  rename(temp = TempInSitu)
+
+Sample.Info.May <-
+  Sample.Info %>%
+  filter(experiment == "b") %>%
+  left_join(
+    aggregate(cbind(pH,TempInSitu) ~ tank, data = maypH, FUN = mean) %>%
+    mutate(tank = as.character(tank)), 
+    by = "tank") %>%
+  rename(temp = TempInSitu)
+
+# combine april and may
+Sample.Info.New <- bind_rows(Sample.Info.April,Sample.Info.May)
+
+# assigning factors
+Sample.Info.New <- Sample.Info.New %>%
+  mutate(BLANK = as.factor(BLANK)) %>%
+  mutate(ID = as.factor(ID)) %>%
+  mutate(dry_weight = as.numeric(dry_weight))
+```
+
+## pH and temperature graphs
+```{r tank-graphs}
+aprilpH <- aprilpH %>%
+  mutate(experiment = "Early Spring") # assigning experimental label as Early Spring
+maypH <- maypH %>%
+  mutate(experiment = "Late Spring") # assigning experimental label as Late Spring
+
+AllpHData <- bind_rows(aprilpH, maypH) #bind together
+
+# temperature graph
+tanktempgraph <- AllpHData %>%
+  ggplot(aes(x=as.factor(expected_temp), y= TempInSitu, 
+             group = interaction(expected_temp,experiment), color = experiment))+
+  geom_boxplot(width = 0.5, outlier.alpha = 0.1)+
+  scale_color_manual(values = c("#540D6E", "#0a7d4c"))+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 16)) +
+  labs(x = expression(paste("Target temperature (",degree,"C)")), 
+       y = expression(paste("Average tank temperature (",degree,"C)")), 
+       color = "Experiment" )
+
+# pH graph
+tankphgraph <- AllpHData %>%
+  ggplot(aes(x=expected_pH, y= pH, gro.up = interaction(expected_pH,experiment), color = experiment))+
+  geom_boxplot(width=0.1, outlier.alpha = 0.2)+
+  scale_color_manual(values = c("#540D6E", "#0a7d4c"))+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 16)) +
+  labs(x = expression(Target~pH[T]), 
+       y = expression(Average~tank~pH[T]), 
+       color = "Experiment")
+
+tankphgraph + tanktempgraph
+
+ggsave("Fig S3.png", path=here("Output"), width = 12, height = 6)
+```
+
+## Carbonate parameters & table creation
+```{r carb-table, eval = FALSE}
+aprilcarb <- aprilcarb %>%
+  mutate(experiment = "Early spring")%>% # add label for experiment
+  mutate(SampleID = as.character(SampleID))
+
+maycarb <- maycarb %>%
+  mutate(experiment = "Late spring") # add label for experiment
+
+carb <- bind_rows(aprilcarb, maycarb) # combine all
+
+# calculate means and sds for each column
+carb_summary <- carb %>%
+  group_by(experiment, SampleID) %>%
+  summarise(
+    across(where(is.numeric),
+           list(mean = ~mean(.x, na.rm = TRUE),
+                sd = ~sd(.x, na.rm = TRUE)),
+           .names = "{.col}_{.fn}") 
+  )
+
+# reformat so mean and sd are in the same column
+carb_summary <- carb_summary %>%
+  rowwise() %>%
+  mutate(
+    across(
+      ends_with("_mean"),
+      ~ {
+        base <- sub("_mean$", "", cur_column())
+        mean_val <- .x
+        sd_val <- get(paste0(base, "_sd"))
+        sprintf("%.2f ± %.2f", mean_val, sd_val)
+      },
+      .names = "{.col}_formatted"
+    )
+  ) %>%
+  ungroup() %>%
+  dplyr::select(SampleID, experiment, ends_with("_formatted"))
+
+write.csv(carb_summary, here("Data/pH_temp/carb_summary.csv"))
 ```
 
 # Tegula Analyses
@@ -492,32 +470,13 @@ tegulaSizes %>%
       fill = expression(paste("Temperature (",degree,"C)")),
       y = expression(Shell~length~(mm)))
 
-initialsizeplot + initialshellplot + plot_layout(guides = "collect", axes = "collect_x")
-
-#ggsave("initial snails.png", path=here("Output"), width = 10, height = 5)
-
 t.test(shell_length_mm~experiment, data = tegulaSizes)
 t.test(final_dry_weight~experiment, data = tegulaSizes)
 ```
 
 ### Subsetting snail sizes
 ```{r snail-subset}
-# sub-sample for the general range of late spring
-
-summary(tegulaSizes %>% 
-          filter(experiment == "Early spring"))
-
-summary(tegulaSizes %>% 
-          filter(experiment == "Late spring"))
-# one outlier, but otherwise largest snail is 0.0516
-
-tegresposubdf <- tegrespodry %>%
-  filter(dry_weight <= 0.0516)
-
-# is it still normal after subsetting?
-shapiro.test(tegresposubdf$Respiration)
-
-#try with shell length 13-15mm
+# sub-sample for the overlapping size range (shell length 13-15mm)
 tegulaSizes_new <-bind_rows(
   tegulaSizes %>%
     filter(experiment == "Early spring") %>%
@@ -536,7 +495,8 @@ tegresposubdf <- tegrespodry_new %>%
   filter(shell_length_mm >= 13 & shell_length_mm <= 15)
 
 # how much did shell length densities overlap originally?
-shell_lengths <- list(a = (tegrespodry_new %>% filter(experiment == "a"))$shell_length_mm, b = (tegulaSizes_new %>% filter(experiment == "b"))$shell_length_mm)
+shell_lengths <- list(a = (tegrespodry_new %>% filter(experiment == "a"))$shell_length_mm, 
+                      b = (tegulaSizes_new %>% filter(experiment == "b"))$shell_length_mm)
 
 ## density overlap graph
 overlap(shell_lengths)
@@ -554,7 +514,8 @@ densityplot <-
        b = "Late spring")
 
 # how much do shell length densities overlap in the 13-15 mm range?
-shell_lengths_sub <- list(a = (tegresposubdf %>% filter(experiment == "a"))$shell_length_mm, b = (tegresposubdf %>% filter(experiment == "b"))$shell_length_mm)
+shell_lengths_sub <- list(a = (tegresposubdf %>% filter(experiment == "a"))$shell_length_mm,
+                          b = (tegresposubdf %>% filter(experiment == "b"))$shell_length_mm)
 
 ## density overlap graph
 overlap(shell_lengths_sub)
@@ -571,9 +532,9 @@ subsetdensityplot <-
        a = "Early spring",
        b = "Late spring")
 
-densityplot + subsetdensityplot + plot_layout(guides = "collect", axes = "collect")
+initialsizeplot + initialshellplot + plot_layout(guides = "collect", axes = "collect_x") + densityplot + subsetdensityplot + plot_layout(guides = "collect", axes = "collect")
 
-#ggsave("Snail density plots.png", path = here("Output"), width = 8, height = 4)
+ggsave("Fig S2.png", path = here("Output"), width = 8, height = 8)
 ```
 
 ### Average models for each month
@@ -862,7 +823,7 @@ std_coefs %>%
         legend.text = element_text(size = 12))
 ```
 
-### Shell calcification
+### Shell calcification (supplemental figure)
 ```{r}
 shellcalc %>%
   filter(is.na(sample_type)) %>%
@@ -1372,61 +1333,6 @@ std_coefs %>%
         legend.text = element_text(size = 12))
 
 # patchwork guide = collect to show one legend
-```
-
-## Net Photosynthesis
-
-### Only controls
-```{r eval=FALSE, echo=FALSE}
-rwmodelNP <- lm(NetPhoto ~ pH * temp_treatment * experiment, data=rwrespo_clean %>% filter (predator == "c"))
-anova(rwmodelNP) #model stats, exp, ph x exp, temp x exp sig
-summary(rwmodelNP)
-
-rwrespo_clean %>%
-  filter(predator == "c") %>%
-  ggplot(aes(x = pH, y = NetPhoto, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
-  facet_wrap(~experiment, labeller = as_labeller(c("a" = "April", "b" = "May"))) +
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw()+
-  theme(
-    strip.background = element_rect(fill = "white"),
-    text = element_text(size = 14)
-  ) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-    labs(
-    x = expression(pH[T]),
-    color = expression(paste("Temperature (",degree,"C)")),
-    fill = expression(paste("Temperature (",degree,"C)")),
-    y = expression(Net~Photosynthetic~rate~(mu*mol~O[2]~g^-1~hr^-1))
-  )
-```
-
-### With non-controls
-```{r eval=FALSE,echo=FALSE}
-rwmodelNP_all <- lm(NetPhoto ~ pH * temp_treatment * experiment, data=rwrespo_clean)
-anova(rwmodelNP_all) #model stats, exp, ph x expsig
-summary(rwmodelNP_all)
-
-rwrespo_clean %>%
-  ggplot(aes(x = pH, y = NetPhoto, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
-  facet_wrap(~experiment, labeller = as_labeller(c("a" = "April", "b" = "May"))) +
-  geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm", se = TRUE) +
-  theme_bw()+
-  theme(
-    strip.background = element_rect(fill = "white"),
-    text = element_text(size = 14)
-  ) +
-  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
-  scale_color_manual(values = c("skyblue2", "firebrick1")) +
-    labs(
-    x = expression(pH[T]),
-    color = expression(paste("Temperature (",degree,"C)")),
-    fill = expression(paste("Temperature (",degree,"C)")),
-    y = expression(Net~Photosynthetic~rate~(mu*mol~O[2]~g^-1~hr^-1))
-  )
 ```
 
 # Patchworked Figures

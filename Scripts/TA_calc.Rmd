@@ -102,31 +102,4 @@ clean.full.calc$umol.cm2.hr<-((clean.full.calc$deltaTA/2)*(1.025)*(clean.full.ca
 
 
 write_csv(clean.full.calc, here("Data","TA","NEC.csv"))
-
-## check blanks
-
-blanks %>%
-  ggplot(aes(x=tank, y=TA))+
-  geom_point()+
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"))+
-  labs(title="Blanks")
-
-initial %>%
-  ggplot(aes(x=tank, y=TA))+
-  geom_point()+
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"))+
-  labs(title="Initial")
-
-## try plotting 
-ggplot(data=clean.full.calc, aes(x=pH_treatment, y=umol.cm2.hr, group = interaction(pH_treatment, temp_treatment), color=as.factor(temp_treatment)))+
-  geom_boxplot(outlier.shape=NA) +
-  geom_point()+
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"))+
-  scale_color_manual(values=c("salmon", "salmon4"))+
-  labs(x = "pH",
-       color = "Temperature",
-       y = "Rate (umol CO3 g-1 hr-1)")
 ```

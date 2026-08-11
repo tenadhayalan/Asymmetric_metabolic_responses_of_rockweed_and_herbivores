@@ -25,8 +25,6 @@ pHData<-pHData%>%
   mutate(TrisCalDate = ymd(TrisCalDate),
          Sampling_Date = ymd(date))
 
-# Needed for phosphate data
-
 
 ## take the mV calibration files by each date and use them to calculate pH
 pHSlope<-pHcalib %>%
