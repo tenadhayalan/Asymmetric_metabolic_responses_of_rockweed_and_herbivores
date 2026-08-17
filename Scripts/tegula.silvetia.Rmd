@@ -47,15 +47,15 @@ knitr::opts_chunk$set(
 ```{r load-datasets, echo = FALSE}
 #Load datasets
 calc <- read_csv(here("Data", "TA", "NEC.csv")) # calcification both months
-shellcalc <- read_csv(here("Data", "TA", "shell_NEC.csv"))
-aprilpH <- read_csv(here("Data","pH_temp","ph_temp.csv")) # april pH
-aprilcarb <- read_csv(here("Data","pH_temp","april_carb.csv")) # april background co2 parameters
-aprilTeg <- read_csv(here("Data","growth","tegula_initial_april.csv")) # april tegula
-maypH <- read_csv(here("Data","pH_temp","ph_temp.csv")) # may pH
+shellcalc <- read_csv(here("Data", "TA", "shell_NEC.csv")) # blank shell calcification
+aprilpH <- read_csv(here("Data","pH_temp","ph_temp_early_spring.csv")) # early spring pH
+aprilcarb <- read_csv(here("Data","pH_temp","carb_early_spring.csv")) # early spring background carbonate parameters
+aprilTeg <- read_csv(here("Data","growth","snail_early_spring.csv")) # early spring snail sizes
+maypH <- read_csv(here("Data","pH_temp","ph_temp_late_spring.csv")) # late spring pH
 maycarb <- read_csv(here("Data", "pH_temp", "may_carb.csv")) # may background co2 parameters
-mayTeg <- read_csv(here("Data","growth","tegula_initial_may.csv")) # may tegula
-Sample.Info <- read_csv(here("Data","PR_2024","Metadata_combined.csv")) # respo metadata both months
-respo_dry_clean <- read.csv(here("Data", "PR_2024","Physiological_rates.csv")) # respo both months
+mayTeg <- read_csv(here("Data","growth","snail_late_spring.csv")) # late spring snail sizes
+Sample.Info <- read_csv(here("Data","PR","Metadata_combined.csv")) # respo metadata both months
+respo_dry_clean <- read.csv(here("Data", "PR","Physiological_rates.csv")) # respo both months
 beuti <- read.csv(here("Data","pH_temp","beuti_daily.csv")) #biologically effective upwelling index
 temp <- read.csv(here("Data","field","san_pedro_temp_buoy.csv")) #https://data.caloos.org/#metadata/103471/station/data
 rwfield <- read.csv(here("Data","field","rockweed_density.csv")) # rockweed density from quadrats
