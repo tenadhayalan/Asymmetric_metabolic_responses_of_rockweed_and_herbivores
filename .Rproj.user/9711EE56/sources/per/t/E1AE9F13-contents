@@ -1,0 +1,1377 @@
+---
+title: "Asymmetric metabolic responses of rockweed and herbivorous snails reveal seasonal vulnerabilities to warming and acidification"
+author: "Tena Dhayalan"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: cosmo
+    toc: yes
+    toc_float:
+      collapsed: true
+---
+  
+```{r load-libs ,echo=FALSE, message=FALSE}
+library(dplyr)
+library(broom)
+library(purrr)
+library(lubridate)
+library(tidyverse)
+library(nlstools)
+library(here)
+library(stringr)
+library(lmerTest)
+library(emmeans)
+library(lme4)
+library(knitr)
+require(kableExtra)
+library(tidyverse)
+library(car)
+options(knitr.table.format = "html")
+library(maps)
+library(mapproj)
+library(mapdata)
+library(effectsize)
+library(ggtext)
+library(patchwork)
+library(overlapping)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,    # Show warnings
+  message = FALSE,    # Show messages
+  error = FALSE       # Show errors
+)
+```
+
+```{r load-datasets, echo = FALSE}
+#Load datasets
+calc <- read_csv(here("Data", "TA", "NEC.csv")) # calcification both months
+shellcalc <- read_csv(here("Data", "TA", "shell_NEC.csv")) # blank shell calcification
+aprilpH <- read_csv(here("Data","pH_temp","ph_temp_early_spring.csv")) # early spring pH
+aprilcarb <- read_csv(here("Data","pH_temp","carb_early_spring.csv")) # early spring background carbonate parameters
+aprilTeg <- read_csv(here("Data","growth","snail_early_spring.csv")) # early spring snail sizes
+maypH <- read_csv(here("Data","pH_temp","ph_temp_late_spring.csv")) # late spring pH
+maycarb <- read_csv(here("Data", "pH_temp", "may_carb.csv")) # may background co2 parameters
+mayTeg <- read_csv(here("Data","growth","snail_late_spring.csv")) # late spring snail sizes
+Sample.Info <- read_csv(here("Data","PR","Metadata_combined.csv")) # respo metadata both months
+respo_dry_clean <- read.csv(here("Data", "PR","Physiological_rates.csv")) # respo both months
+beuti <- read.csv(here("Data","pH_temp","beuti_daily.csv")) #biologically effective upwelling index
+temp <- read.csv(here("Data","field","san_pedro_temp_buoy.csv")) #https://data.caloos.org/#metadata/103471/station/data
+rwfield <- read.csv(here("Data","field","rockweed_density.csv")) # rockweed density from quadrats
+tegfield <- read.csv(here("Data","field","rw_eiseni.csv")) # tegula densities from quadrats
+tegsizefield <- read.csv(here("Data","field","eiseni_size.csv")) # tegula size from quadrats
+```
+
+# Field data
+
+## Site map CA
+```{r ca-map}
+states<-map_data("state") #all state coordinates
+ca_data <- states %>%
+  filter(region == "california") #just filter out california
+
+ggplot()+
+  geom_polygon(data = ca_data,
+               aes(x=long, y=lat, group = group), color = "black")+
+  geom_point(aes(x = -118.294363, y = 33.704647), color= "khaki2", size = 5)+
+  coord_map()+
+  theme_void()
+
+ggsave("Fig 1C.png", path=here("Output"))
+```
+
+## Field temperatures
+```{r field-temp}
+temp %>%
+  ggplot(aes(x = as.factor(date), y = sea_water_temperature)) +
+  geom_smooth(aes(x = date, y = sea_water_temperature),method = "loess", color = "salmon4", size = 1, se = TRUE)+
+  geom_point(aes(x = date, y = sea_water_temperature), color = "salmon4", alpha = 0.1) +
+  theme_bw()+
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 18),
+    legend.position = "none") +
+    labs(x = expression(Date),
+    y = expression(paste("Temperature ",degree,"C"))
+  ) 
+
+ggsave("Fig 1B.png", path = here("Output"))
+
+# what were temperatures two weeks before collection like?
+
+# early spring = 15.05, sd = 1.01
+temp %>%
+  filter(date >= as.Date("2024-03-15") & date <= as.Date("2024-03-29")) %>%
+           summarize(avg_temp = mean(sea_water_temperature, na.rm = TRUE), 
+                     temp_sd = sd(sea_water_temperature, na.rm = TRUE))
+
+# late spring = 15.91, sd = 0.51
+temp %>%
+  filter(date >= as.Date("2024-04-30") & date <= as.Date("2024-05-13")) %>%
+           summarize(avg_temp = mean(sea_water_temperature, na.rm = TRUE),
+                     temp_sd = sd(sea_water_temperature, na.rm = TRUE))
+
+tempdf <- temp %>%
+  filter(date >= as.Date("2024-03-15") & date <= as.Date("2024-03-29")) %>%
+  mutate(season = "Early Spring") %>%
+  bind_rows(
+    temp %>%
+      filter(date >= as.Date("2024-04-30") & date <= as.Date("2024-05-13")) %>%
+  mutate(season = "Late Spring")
+  ) %>%
+  na.omit()
+
+# statistically compare the temperature the week before collection for both experiments
+
+t.test(sea_water_temperature~season, data = tempdf)
+```
+
+## BEUTI
+```{r beuti, echo=FALSE}
+
+# organize data
+beuti <- beuti %>%
+  filter(year== 2024, month %in% 3:6) # dplyr::select only data from March to May 2024
+
+beuti <- beuti %>%
+  mutate(date = make_date(year, month, day)) # make a column of date to combine year, month, and day
+
+# create plot
+
+beuti %>%
+  ggplot(aes(x = as.factor(date), y = X34N)) +
+  geom_smooth(aes(x = date, y = X34N),method = "loess", color = "salmon4", size = 1)+
+  geom_point(aes(x = date, y = X34N), color = "salmon4", alpha = 0.2) +
+  theme_bw()+
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 18),
+    legend.position = "none") +
+    labs(x = expression(Date),
+    y = paste("Biologically Effective Upwelling \nTransport Index")
+  ) 
+
+ggsave("Fig 1A.png", path=here("Output"))
+
+# statistically compare BEUTI before early and late spring
+beutidf <- 
+  beuti %>%
+    select(date, X34N) %>%
+    filter(date >= as.Date("2024-03-15") & date <= as.Date("2024-03-29")) %>%
+      mutate(season = "Early Spring") %>%
+  bind_rows(
+    beuti %>%
+      select(date,X34N) %>%
+      filter(date >= as.Date("2024-04-30") & date <= as.Date("2024-05-13")) %>%
+       mutate(season = "Late Spring")
+  ) %>%
+  na.omit()
+
+t.test(X34N~season, data = beutidf)
+
+```
+
+## Field surveys
+
+### Rockweed
+```{r field-rw}
+# scale up to m
+rwfield <- rwfield %>%
+  mutate(rockweed_density_m = rockweed_density * 4)
+
+# density plot
+rwfield %>%
+  ggplot(aes(x = 0, y=rockweed_density_m)) + 
+    geom_dotplot(binaxis='y', stackdir='center', alpha = 0.1)+
+    theme_bw()+
+    stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", color="black", size = 1)+
+    labs(y = expression(paste("Rockweed density m" ^ "-2")))+
+    theme(axis.title = element_text(size = 22), axis.text = element_text(size = 18), 
+          axis.text.x = element_blank(), 
+          axis.title.x = element_blank())
+```
+
+### Tegula
+
+#### Tegula density
+```{r field-teg-dens}
+# scale up to m
+tegfield <- tegfield %>%
+  mutate(teg_density_m = total...eiseni * 4)
+
+# create density plot
+tegfield %>%
+  ggplot(aes(x = 0, y = teg_density_m)) + 
+    geom_dotplot(binaxis='y', stackdir='center', alpha = 0.1)+
+    theme_bw()+
+    stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", color="black", size = 1)+
+    labs(y = expression(paste("Tegula density m" ^ "-2")))+
+    theme(axis.title = element_text(size = 22), axis.text = element_text(size = 18), 
+          axis.text.x = element_blank(), 
+          axis.title.x = element_blank())
+```
+
+#### Tegula size
+```{r field-teg-size}
+# shell length
+
+# define bin breaks
+breaks <- seq(6, 21, by = 2)
+
+tegshelllengthplot <-
+ggplot(tegsizefield, aes(x = shell_length)) +
+  geom_histogram(breaks = breaks, fill = "peachpuff3", color = "white") +
+  scale_x_continuous(
+    breaks = head(breaks, -1) + diff(breaks)/2,  # position labels at bin centers
+    labels = paste(head(breaks, -1), "-", tail(breaks, -1))  # show bin ranges
+  ) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 15),
+    axis.title = element_text(size = 18),
+    plot.title = element_text(size = 15)
+  ) +
+  labs(x = "Shell length (mm)", y = "Observations")
+
+# shell width
+
+# define bin breaks
+breaks <- seq(6, 21, by = 2)
+
+tegshellwidthplot <-
+ggplot(tegsizefield, aes(x = shell_width)) +
+  geom_histogram(breaks = breaks, fill = "peachpuff3", color = "white") +
+  scale_x_continuous(
+    breaks = head(breaks, -1) + diff(breaks)/2,  # position labels at bin centers
+    labels = paste(head(breaks, -1), "-", tail(breaks, -1))  # show bin ranges
+  ) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 15),
+    axis.title = element_text(size = 18),
+    plot.title = element_text(size = 15)
+  ) +
+  labs(x = "Shell width (mm)", y = "Observations")
+
+tegshelllengthplot + tegshellwidthplot + plot_layout(axes = "collect") # put plots together
+
+ggsave("Fig S1.png", path=here("Output"), width = 12, height = 6) # save to output folder
+
+# determine range actually collected
+allTeg <- bind_rows(aprilTeg, mayTeg) %>%
+  filter(!is.na(shell_length2)) # get rid of extra snails not placed in tanks
+
+summary(allTeg)
+```
+# Experimental tank data
+
+## Average tank pH
+```{r tank-pH}
+# adding pH to metadata
+Sample.Info.April <-
+  Sample.Info %>%
+  filter(experiment == "a") %>%
+  left_join(
+    aggregate(cbind(pH,TempInSitu) ~ tank, data = aprilpH, FUN = mean) %>%
+    mutate(tank = as.character(tank)), 
+    by = "tank") %>%
+  rename(temp = TempInSitu)
+
+Sample.Info.May <-
+  Sample.Info %>%
+  filter(experiment == "b") %>%
+  left_join(
+    aggregate(cbind(pH,TempInSitu) ~ tank, data = maypH, FUN = mean) %>%
+    mutate(tank = as.character(tank)), 
+    by = "tank") %>%
+  rename(temp = TempInSitu)
+
+# combine april and may
+Sample.Info.New <- bind_rows(Sample.Info.April,Sample.Info.May)
+
+# assigning factors
+Sample.Info.New <- Sample.Info.New %>%
+  mutate(BLANK = as.factor(BLANK)) %>%
+  mutate(ID = as.factor(ID)) %>%
+  mutate(dry_weight = as.numeric(dry_weight))
+```
+
+## pH and temperature graphs
+```{r tank-graphs}
+aprilpH <- aprilpH %>%
+  mutate(experiment = "Early Spring") # assigning experimental label as Early Spring
+maypH <- maypH %>%
+  mutate(experiment = "Late Spring") # assigning experimental label as Late Spring
+
+AllpHData <- bind_rows(aprilpH, maypH) #bind together
+
+# temperature graph
+tanktempgraph <- AllpHData %>%
+  ggplot(aes(x=as.factor(expected_temp), y= TempInSitu, 
+             group = interaction(expected_temp,experiment), color = experiment))+
+  geom_boxplot(width = 0.5, outlier.alpha = 0.1)+
+  scale_color_manual(values = c("#540D6E", "#0a7d4c"))+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 16)) +
+  labs(x = expression(paste("Target temperature (",degree,"C)")), 
+       y = expression(paste("Average tank temperature (",degree,"C)")), 
+       color = "Experiment" )
+
+# pH graph
+tankphgraph <- AllpHData %>%
+  ggplot(aes(x=expected_pH, y= pH, gro.up = interaction(expected_pH,experiment), color = experiment))+
+  geom_boxplot(width=0.1, outlier.alpha = 0.2)+
+  scale_color_manual(values = c("#540D6E", "#0a7d4c"))+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 16)) +
+  labs(x = expression(Target~pH[T]), 
+       y = expression(Average~tank~pH[T]), 
+       color = "Experiment")
+
+tankphgraph + tanktempgraph
+
+ggsave("Fig S3.png", path=here("Output"), width = 12, height = 6)
+```
+
+## Carbonate parameters & table creation
+```{r carb-table, eval = FALSE}
+aprilcarb <- aprilcarb %>%
+  mutate(experiment = "Early spring")%>% # add label for experiment
+  mutate(SampleID = as.character(SampleID))
+
+maycarb <- maycarb %>%
+  mutate(experiment = "Late spring") # add label for experiment
+
+carb <- bind_rows(aprilcarb, maycarb) # combine all
+
+# calculate means and sds for each column
+carb_summary <- carb %>%
+  group_by(experiment, SampleID) %>%
+  summarise(
+    across(where(is.numeric),
+           list(mean = ~mean(.x, na.rm = TRUE),
+                sd = ~sd(.x, na.rm = TRUE)),
+           .names = "{.col}_{.fn}") 
+  )
+
+# reformat so mean and sd are in the same column
+carb_summary <- carb_summary %>%
+  rowwise() %>%
+  mutate(
+    across(
+      ends_with("_mean"),
+      ~ {
+        base <- sub("_mean$", "", cur_column())
+        mean_val <- .x
+        sd_val <- get(paste0(base, "_sd"))
+        sprintf("%.2f ± %.2f", mean_val, sd_val)
+      },
+      .names = "{.col}_formatted"
+    )
+  ) %>%
+  ungroup() %>%
+  dplyr::select(SampleID, experiment, ends_with("_formatted"))
+
+write.csv(carb_summary, here("Data/pH_temp/carb_summary.csv"))
+```
+
+# Tegula Analyses
+
+## Respiration
+
+### Set-up dataframes
+```{r teg-respo-setup, echo=FALSE}
+# merging tegula respo data
+
+## select only tegula respiration rates
+tegrespodry <- respo_dry_clean %>%
+  filter(Species == "Tegula") %>% # filter out rockweeds
+  mutate(ID = as.factor(ID))
+
+## select only tegula metadata
+Teg.Sample.Info.New.pH <- Sample.Info.New %>%
+  filter(Species == "Tegula") %>%
+  select("ID", "block", "pH", "Date", "experiment")
+
+## merge metadata and respiration rates
+tegrespodry <- merge(tegrespodry, Teg.Sample.Info.New.pH, 
+                     by = c("ID", "block", "experiment"), all.x = TRUE) %>%
+              # making wet a number
+               mutate(initial_wet_weight = as.numeric(initial_wet_weight)) %>%
+              # making temp a factor
+               mutate(temp_treatment = as.factor(temp_treatment))
+```
+
+### Initial size difference
+```{r echo=FALSE}
+# graph of dry weight
+initialsizeplot <-
+tegrespodry %>%
+  ggplot(aes(x=pH, y=dry_weight))+
+ facet_wrap(~experiment,labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring")))+
+  geom_point(aes(color = temp_treatment, fill = temp_treatment), alpha = 0.5)+
+  stat_summary(
+  aes(x = 7.6, y = dry_weight),  # fixed x-position for all points
+  fun.data = mean_sdl,
+  fun.args = list(mult = 1),
+  geom = "pointrange",
+  size = 1,
+  color = "black",
+  inherit.aes = FALSE)+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 14)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1"))+ 
+  scale_y_continuous(limits = c(0,0.15))+
+  scale_x_continuous(limits = c(7.1,8.1))+
+  labs(x = expression(pH[T]),
+      color = expression(paste("Temperature (",degree,"C)")),
+      fill = expression(paste("Temperature (",degree,"C)")),
+      y = expression(Dry~weight~(g)))
+
+# get shell data in one place for graph
+aprilTeg$experiment <- "Early spring"
+mayTeg$experiment <- "Late spring"
+tegulaSizes <- rbind(aprilTeg, mayTeg) %>%
+  filter(!is.na(dry_shell))
+
+tegsize <- tegrespodry %>%
+  group_by(experiment) %>%
+  summarize (
+    avg_size = mean(dry_weight, na.rm = TRUE)
+  )
+
+# graph for shell data
+initialshellplot <-
+tegulaSizes %>%
+  ggplot(aes(x=pH, y=shell_length2))+
+ facet_wrap(~experiment)+
+  geom_point(aes(color = as.factor(temp), fill = as.factor(temp)), alpha = 0.5)+
+  stat_summary(
+  aes(x = 7.6, y = shell_length_mm),  # fixed x-position for all points
+  fun.data = mean_sdl,
+  fun.args = list(mult = 1),
+  geom = "pointrange",
+  size = 1,
+  color = "black",
+  inherit.aes = FALSE)+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 14)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+  scale_x_continuous(limits = c(7.1,8.1))+
+  labs(x = expression(pH[T]),
+      color = expression(paste("Temperature (",degree,"C)")),
+      fill = expression(paste("Temperature (",degree,"C)")),
+      y = expression(Shell~length~(mm)))
+
+t.test(shell_length_mm~experiment, data = tegulaSizes)
+t.test(final_dry_weight~experiment, data = tegulaSizes)
+```
+
+### Subsetting snail sizes
+```{r snail-subset}
+# sub-sample for the overlapping size range (shell length 13-15mm)
+tegulaSizes_new <-bind_rows(
+  tegulaSizes %>%
+    filter(experiment == "Early spring") %>%
+    mutate(experiment = "a"),
+  tegulaSizes %>%
+    filter(experiment == "Late spring") %>%
+    mutate(experiment = "b")
+  ) %>%
+  mutate(ID = as.factor(snail_ID)) %>%
+  select(-pH, -snail_ID)
+
+tegrespodry_new <- left_join(tegrespodry, tegulaSizes_new, by = c("experiment","ID", "tank"))
+
+# filter out shell lengths between 13-15 mm
+tegresposubdf <- tegrespodry_new %>%
+  filter(shell_length_mm >= 13 & shell_length_mm <= 15)
+
+# how much did shell length densities overlap originally?
+shell_lengths <- list(a = (tegrespodry_new %>% filter(experiment == "a"))$shell_length_mm, 
+                      b = (tegulaSizes_new %>% filter(experiment == "b"))$shell_length_mm)
+
+## density overlap graph
+overlap(shell_lengths)
+densityplot <- 
+  final.plot(shell_lengths) +
+  scale_fill_manual(values = c("#540D6E", "#0EAD69"),
+                    labels = c("Early spring", "Late Spring"))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"),
+                     labels = c("Early spring", "Late Spring"))+
+  theme(strip.text.x = element_blank())+
+  annotate("text", x = 17.25, y = 0.52, label = "0.57")+
+  labs(x = "Shell length (mm)",
+       y = "Density",
+       a = "Early spring",
+       b = "Late spring")
+
+# how much do shell length densities overlap in the 13-15 mm range?
+shell_lengths_sub <- list(a = (tegresposubdf %>% filter(experiment == "a"))$shell_length_mm,
+                          b = (tegresposubdf %>% filter(experiment == "b"))$shell_length_mm)
+
+## density overlap graph
+overlap(shell_lengths_sub)
+subsetdensityplot <- 
+  final.plot(shell_lengths_sub) +
+  scale_fill_manual(values = c("#540D6E", "#0EAD69"),
+                    labels = c("Early spring", "Late Spring"))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"),
+                     labels = c("Early spring", "Late Spring"))+
+  annotate("text", x = 14.88, y = 1.17, label = "0.69")+
+  theme(strip.text.x = element_blank())+
+  labs(x = "Shell length (mm)",
+       y = "Density",
+       a = "Early spring",
+       b = "Late spring")
+
+initialsizeplot + initialshellplot + plot_layout(guides = "collect", axes = "collect_x") + densityplot + subsetdensityplot + plot_layout(guides = "collect", axes = "collect")
+
+ggsave("Fig S2.png", path = here("Output"), width = 8, height = 8)
+```
+
+### Average models for each month
+```{r teg-respo}
+
+# calculate averages per treatment
+tegrespo_avg <- tegresposubdf %>%
+  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
+  summarize(
+    avg_res = mean(Respiration, na.rm = TRUE)  # calculate mean respo rate
+  )
+
+# find averages by temperature to calculate % increase
+tegrespo_avgrates <- tegrespo_avg %>%
+  group_by(experiment, temp_treatment) %>%
+  summarise(
+    mean_respo = mean(avg_res, na.rm = TRUE)
+  )
+
+# avg models
+avg_res_model <- lm(avg_res ~ pH * temp_treatment * experiment, data = tegrespo_avg)
+anova(avg_res_model) 
+summary(avg_res_model)
+
+# april avg model
+avg_res_model_april <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "a"))
+anova(avg_res_model_april) # nothing sig
+summary(avg_res_model_april)
+plot(avg_res_model_april)
+
+# may avg model
+avg_res_model_may <- lm(avg_res ~ pH * temp_treatment, data = tegrespo_avg %>% filter(experiment == "b"))
+anova(avg_res_model_may) # temp sig
+summary(avg_res_model_may)
+
+# avg plot
+
+# predict using model
+tegresposubdf <- tegresposubdf %>%
+  mutate(predicted_res = predict(avg_res_model, newdata = tegresposubdf))
+
+predictions <- predict(avg_res_model, newdata = tegresposubdf, interval = "confidence")
+
+# Add predictions and confidence intervals to calc_new
+tegresposubdf <- tegresposubdf %>%
+  mutate(predicted_res = predictions[, "fit"],
+         lower_ci = predictions[, "lwr"],  # Lower confidence bound
+         upper_ci = predictions[, "upr"])  # Upper confidence bound
+
+# avg plot
+avgtegrespoplot <- 
+tegresposubdf %>%
+  ggplot(aes(x = pH, y = Respiration, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
+  facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
+  scale_y_continuous(limits = c(0,80)) +
+  geom_point(alpha = 0.1) + # raw data
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
+  geom_point(data = tegrespo_avg, aes(y = avg_res), 
+             color = "black", size = 2, alpha = 0.8, shape = 21) +  
+  geom_line(aes(y = predicted_res), size = 1.2) + # add model line
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 14)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+  labs(x = expression(pH[T]),
+       color = expression(paste("Temperature (",degree,"C)")),
+       fill = expression(paste("Temperature (",degree,"C)")),
+       y = expression(Respiration~rate~(mu*mol~O[2]~g^-1~hr^-1)))
+```
+
+### Respo effect size plot
+```{r teg-respo-plot}
+tegrespo_avg <- tegrespo_avg %>%
+  ungroup() %>%
+  # make temp a number
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% 
+  # scale the values to calculated standardized effects
+  mutate(pH_scale = as.numeric(scale(pH)), 
+         temp_scale = as.numeric(scale(temp_num)))
+
+# april model using scaled data
+tegmodel_res_april <- lm(avg_res ~ pH_scale * temp_scale, data=tegrespo_avg %>% filter(experiment == "a"))
+#plot(tegmodel_res_april)
+anova(tegmodel_res_april) # nothing sig
+summary(tegmodel_res_april)
+
+# may model using scaled data
+tegmodel_res_may <- lm(avg_res ~ pH_scale * temp_scale, data=tegrespo_avg %>% filter(experiment == "b"))
+#plot(tegmodel_res)
+anova(tegmodel_res_may) # temp sig
+summary(tegmodel_res_may)
+
+
+### Extract the standardized effect sizes using the effectsize function from emmeans
+
+std_coefs<-as_tibble(effectsize(tegmodel_res_april)) %>% # get the effect sizes for april
+  mutate(month = "Early spring") %>% # add the season
+  left_join(tidy(tegmodel_res_april) %>%
+              dplyr::select(Parameter = term, p.value)) %>% # bring in the p-values from the summary of the model 
+  bind_rows(as_tibble(effectsize(tegmodel_res_may)) %>% # bind it to the same for May
+              mutate(month = "Late spring") %>%
+              left_join(tidy(tegmodel_res_may) %>%
+                          dplyr::select(Parameter = term, p.value))) %>%
+  filter(Parameter != "(Intercept)") %>% # remove the intercepts for the STD Coef plot
+  mutate(Parameter = case_when(Parameter == "temp_scale" ~"Temperature",
+                               Parameter == "pH_scale" ~"pH",
+                               Parameter == "pH_scale:temp_scale"~"pH:Temperature")) %>% # make names prettier
+  mutate(Parameter = factor(Parameter, levels = c("pH:Temperature","Temperature","pH"))) %>% # put it in the order I want
+  mutate(significant = ifelse(p.value < 0.055, 1, 0.2)) # change the alpha of points that are not significant
+
+
+# make a standardized effects plot
+tegrespoplot <- 
+  std_coefs %>%
+  ggplot(aes(x = Std_Coefficient, y = Parameter, color = month, alpha = significant))+
+  geom_vline(xintercept = 0, lty = 3)+
+  geom_point(size = 3, 
+             position = position_dodge(width = 0.2))+ # offset the points a little bit so not on top of each other by month
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high), 
+                 height = 0.1, position = position_dodge(width = 0.2))+
+  labs(x = "Standardized Effect Size \n Respiration", 
+       y = "",
+       color = "")+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"))+
+  scale_alpha(range = c(0.3,1))+
+  guides(alpha = "none")+ # don't show the alpha legend
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12))
+```
+ 
+## Calcification
+
+### Set-up dataframe
+```{r teg-calc-setup}
+# create calc df
+calc_new <- calc %>%
+  # make ID a factor
+  mutate(ID = as.factor(ID)) %>%
+  # join with metadata
+  left_join(Teg.Sample.Info.New.pH %>% 
+            dplyr::select(ID,pH,experiment)) %>%
+  # make temp and exp a factor
+  mutate(temp_treatment = as.factor(temp_treatment)) %>%
+  mutate(experiment = as.factor(experiment))
+
+calc_new <- left_join(calc_new, tegulaSizes_new, by = c("experiment","ID"))
+
+calc_new <- calc_new %>%
+  filter(shell_length_mm >= 13 & shell_length_mm <= 15) %>%
+  filter(!deltaTA > mean(umol.cm2.hr, na.rm = TRUE) + 3 * sd(umol.cm2.hr, na.rm = TRUE)) 
+```
+
+### Average models and plot
+```{r teg-calc-avg}
+# calculate averages 
+calc_avg <- calc_new %>%
+  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
+  summarize(
+    avg_calc = mean(umol.cm2.hr, na.rm = TRUE)  # calculate mean calc rate
+  )
+
+# find averages by temperature to calculate % increase
+calc_avgrates <- calc_avg %>%
+  group_by(experiment, temp_treatment) %>%
+  summarise(
+    mean_calc = mean(avg_calc, na.rm = TRUE)
+  )
+
+# find averages by pH to calculate % increase
+calc_avgrates <- calc_avg %>%
+  group_by(experiment, pH) %>%
+  summarise(
+    mean_calc = mean(avg_calc, na.rm = TRUE)
+  )
+
+# april avg model
+avg_calc_model_april <- lm(avg_calc ~ pH * temp_treatment, data = calc_avg %>% filter(experiment == "a"))
+anova(avg_calc_model_april) # nothing sig
+summary(avg_calc_model_april) 
+
+# may avg model
+avg_calc_model_may <- lm(avg_calc ~ pH * temp_treatment, data = calc_avg %>% filter(experiment == "b"))
+anova(avg_calc_model_may) # pH and temp sig
+summary(avg_calc_model_may) 
+
+# avg model altogether
+avg_calc_model <- lm(avg_calc ~ pH * temp_treatment * experiment, data = calc_avg)
+anova(avg_calc_model) # ph x exp, temp x exp
+summary(avg_calc_model) 
+
+# avg plot
+
+# predict using model
+calc_new <- calc_new %>%
+  mutate(predicted_calc = predict(avg_calc_model, newdata = calc_new))
+
+predictions <- predict(avg_calc_model, newdata = calc_new, interval = "confidence")
+
+# Add predictions and confidence intervals to calc_new
+calc_new <- calc_new %>%
+  mutate(predicted_calc = predictions[, "fit"],
+         lower_ci = predictions[, "lwr"],  # Lower confidence bound
+         upper_ci = predictions[, "upr"])  # Upper confidence bound
+
+# avg plot
+avgcalcplot <-
+calc_new %>%
+  ggplot(aes(x = pH, y = umol.cm2.hr, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
+  facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
+  geom_point(alpha = 0.1) + # raw data
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
+  geom_point(data = calc_avg, aes(y = avg_calc), 
+             color = "black", size = 2, alpha = 0.8, shape = 21) +  
+  geom_line(aes(y = predicted_calc), size = 1.2) + # add model line
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 14)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+  labs(x = expression(pH[T]),
+       color = expression(paste("Temperature (",degree,"C)")),
+       fill = expression(paste("Temperature (",degree,"C)")),
+       y = expression(Calcification~rate~(mu*mol~CaCO[3]~g^-1~hr^-1)))
+```
+
+### Effect size plot
+```{r teg-calc-plot}
+calc_avg <- calc_avg %>%
+  ungroup() %>%
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
+  mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
+         temp_scale = as.numeric(scale(temp_num)))
+
+# April - run your model on the scaled data for april
+tegmodel_cal_april <- lm(avg_calc ~ pH_scale * temp_scale, data=calc_avg %>% filter(experiment == "a"))
+#plot(tegmodel_res)
+anova(tegmodel_cal_april) # nothing sig
+summary(tegmodel_cal_april)
+
+# May - again in may
+tegmodel_cal_may <- lm(avg_calc ~ pH_scale * temp_scale, data=calc_avg %>% filter(experiment == "b"))
+#plot(tegmodel_res)
+anova(tegmodel_cal_may) # ph and temp sig
+summary(tegmodel_cal_may)
+
+
+### Extract the standardized effect sizes using the effectsize function from emmeans (this is using cohens_d, I believe, which scales everything on 0 - 1)
+
+std_coefs<-as_tibble(effectsize(tegmodel_cal_april)) %>% # get the effect sizes for april
+  mutate(month = "Early spring") %>% # add the month
+  left_join(tidy(tegmodel_cal_april) %>%
+              dplyr::select(Parameter = term, p.value)) %>% # bring in the p-values from the summary of the model (which is now correct now that the values are standardized -- Note you STILL report the ANOVA results when talking about your significance in the model.  These p-values essentially tell you if the values are different or not from your intercept (essentiall 0))
+  bind_rows(as_tibble(effectsize(tegmodel_cal_may)) %>% # bind it to the same for May
+              mutate(month = "Late spring") %>%
+              left_join(tidy(tegmodel_cal_may) %>%
+                          dplyr::select(Parameter = term, p.value))) %>%
+  filter(Parameter != "(Intercept)") %>% # remove the intercepts for the STD Coef plot
+  mutate(Parameter = case_when(Parameter == "temp_scale" ~"Temperature",
+                               Parameter == "pH_scale" ~"pH",
+                               Parameter == "pH_scale:temp_scale"~"pH:Temperature")) %>% # make names prettier
+  mutate(Parameter = factor(Parameter, levels = c("pH:Temperature","Temperature","pH"))) %>% # put it in the order I want
+  mutate(significant = ifelse(p.value < 0.055, 1, 0.2)) # use this to change the alpha of points that are not significant
+
+
+# make a standardized effects plot. You will eventually bring these different ones together in patchwork like we talked about in person 
+tegcalcplot <-
+std_coefs %>%
+  ggplot(aes(x = Std_Coefficient, y = Parameter, color = month, alpha = significant))+
+  geom_vline(xintercept = 0, lty = 3)+
+  geom_point(size = 3, 
+             position = position_dodge(width = 0.2))+ # offset the points a little bit so not on top of eachother by month
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high), 
+                 height = 0.1, position = position_dodge(width = 0.2))+
+  labs(x = "Standardized Effect Size \n Calcification", 
+       y = "",
+       color = "")+
+  scale_alpha(range = c(0.3,1))+
+    scale_color_manual(values = c("#540D6E", "#0EAD69"))+
+  guides(alpha = "none")+ # don't show the alpha legend
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12))
+```
+
+### Shell calcification (supplemental figure)
+```{r}
+shellcalc %>%
+  filter(is.na(sample_type)) %>%
+  distinct() %>%
+  ggplot(aes(x=pH_treatment, y=umol.cm2.hr, color = as.factor(temp_treatment),fill=as.factor(temp_treatment)))+
+  geom_point(alpha = 1)+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 16)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+  labs(x = expression(pH[T]),
+       color = expression(paste("Temperature (",degree,"C)")),
+       fill = expression(paste("Temperature (",degree,"C)")),
+       y = expression(Calcification~rate~(mu*mol~CaCO[3]~hr^-1)))
+```
+
+# Rockweed
+
+## Gross Photosynthesis
+
+### Set-up dataframe
+```{r rw-gp-setup}
+rwrespo <- respo_dry_clean %>%
+  filter(Species == "Rockweed", Respiration != 0) # filter out snails
+
+RW.Sample.Info.New <- Sample.Info.New %>%
+  filter(Species == "Rockweed", BLANK == "0") # filter out snails
+
+rwrespo$ID <- as.factor(rwrespo$ID)
+rwrespo <- rwrespo %>%
+  left_join(RW.Sample.Info.New %>% dplyr::select(pH, experiment, ID) %>%
+  distinct(experiment, ID, .keep_all = TRUE), by = c("experiment","ID")) # bring in sample info
+
+rwrespo_clean <- rwrespo %>%
+    filter(!is.na(Respiration) & !is.nan(Respiration) & !is.infinite(Respiration)) # get rid of any NAs
+
+rwrespo_clean <- rwrespo_clean %>% filter(NetPhoto > 0) # get rid of outliers
+
+rwrespo_clean <- rwrespo_clean %>%
+  mutate(temp_treatment = as.factor(temp_treatment), experiment = as.factor(experiment)) # make factors
+```
+
+### GP with consumer
+```{r rw-gp-consumer}
+## averages for control and consumer cages
+rwrespo_avg_p <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment, predator) %>%  # group for herbivore vs control per tank
+  summarize(
+    avg_gp = mean(GrossPhoto, na.rm = TRUE)  # calculate mean gp rate
+  )
+
+# april
+rwmodelGP_Pa <- lm(avg_gp ~ pH * temp_treatment * predator, data=rwrespo_avg_p %>% filter(experiment == "a"))
+#plot(rwmodelGP_Pa)
+anova(rwmodelGP_Pa) #model stats, pH sig
+summary(rwmodelGP_Pa)
+
+# may
+rwmodelGP_Pb <- lm(avg_gp ~ pH * temp_treatment * predator, data=rwrespo_avg_p %>% filter(experiment == "b"))
+anova(rwmodelGP_Pb) #model stats, pH sig, temp:predator sig
+summary(rwmodelGP_Pb)
+
+# how much larger was GP at 20?
+rwrespo_avg_p %>%
+  filter(experiment == "b") %>%
+  group_by(temp_treatment, predator) %>%
+  summarize(mean(avg_gp)) 
+
+# predict using model
+rwrespo_clean_plot <- rwrespo_clean %>%
+  mutate(predicted_gp = predict(rwmodelGP_Pb, newdata = rwrespo_clean))
+
+predictions <- predict(rwmodelGP_Pb, newdata = rwrespo_clean_plot, interval = "confidence")
+
+# add predictions and confidence intervals to calc_new
+rwrespo_clean_plot <- rwrespo_clean_plot %>%
+  mutate(predicted_gp = predictions[, "fit"],
+         lower_ci = predictions[, "lwr"],  # Lower confidence bound
+         upper_ci = predictions[, "upr"])  # Upper confidence bound
+
+rwrespo_clean_plot %>% 
+  filter(experiment == "b") %>%
+   ggplot(aes(x = pH, y = GrossPhoto, color = as.factor(temp_treatment), 
+              fill = as.factor(temp_treatment))) +
+  facet_wrap(~predator, labeller = as_labeller(c("p" = "Consumer present", "c" = "Consumer absent"))) +
+  geom_point(alpha = 0.1)+ # raw data
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
+  geom_point(data = rwrespo_avg_p, aes(y = avg_gp), 
+             color = "black", size = 2, alpha = 0.8, shape = 21) +
+  geom_line(aes(y = predicted_gp), size = 1.2) +
+  theme_bw()+
+  theme(
+    strip.background = element_rect(fill = "white"),
+    text = element_text(size = 14)
+  ) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+    labs(
+    x = expression(pH[T]),
+    color = expression(paste("Temperature (",degree,"C)")),
+    fill = expression(paste("Temperature (",degree,"C)")),
+    y = expression(Gross~photosynthetic~rate~(mu*mol~O[2]~g^-1~hr^-1)))
+
+#ggsave("predation response.png", path = here("Output"), width = 8, height = 7)
+```
+
+### Effect size plot (main)
+```{r rw-gp-plot}
+rwrespo_avg <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment) %>%  
+  summarize(
+    avg_gp = mean(GrossPhoto, na.rm = TRUE)  # calculate mean gp rate
+  ) %>%
+  ungroup() %>%
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
+  mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
+         temp_scale = as.numeric(scale(temp_num)))
+
+# April - run your model on the scaled data for april
+rwmodel_gp_april <- lm(avg_gp ~ pH_scale * temp_scale, data=rwrespo_avg %>% filter(experiment == "a"))
+#plot(tegmodel_res)
+anova(rwmodel_gp_april) # pH sig
+summary(rwmodel_gp_april)
+
+# May - again in may
+rwmodel_gp_may <- lm(avg_gp ~ pH_scale * temp_scale, data=rwrespo_avg %>% filter(experiment == "b"))
+#plot(tegmodel_res)
+anova(rwmodel_gp_may) # pH sig
+summary(rwmodel_gp_may)
+
+
+### Extract the standardized effect sizes using the effectsize function from emmeans
+
+std_coefs<-as_tibble(effectsize(rwmodel_gp_april)) %>% # get the effect sizes for april
+  mutate(month = "Early spring") %>% # add the month
+  left_join(tidy(rwmodel_gp_april) %>%
+              dplyr::select(Parameter = term, p.value)) %>% # bring in the p-values from the summary of the model 
+  bind_rows(as_tibble(effectsize(rwmodel_gp_may)) %>% # bind it to the same for May
+              mutate(month = "Late spring") %>%
+              left_join(tidy(rwmodel_gp_may) %>%
+                          dplyr::select(Parameter = term, p.value))) %>%
+  filter(Parameter != "(Intercept)") %>% # remove the intercepts for the STD Coef plot
+  mutate(Parameter = case_when(Parameter == "temp_scale" ~"Temperature",
+                               Parameter == "pH_scale" ~"pH",
+                               Parameter == "pH_scale:temp_scale"~"pH:Temperature")) %>% # make names prettier
+  mutate(Parameter = factor(Parameter, levels = c("pH:Temperature","Temperature","pH"))) %>% # put it in the order I want
+  mutate(significant = ifelse(p.value < 0.055, 1, 0.5)) # use this to change the alpha of points that are not significant
+
+
+# make a standardized effects plot
+rwgpplot <-
+std_coefs %>%
+  ggplot(aes(x = Std_Coefficient, y = Parameter, color = month, alpha = significant))+
+  geom_vline(xintercept = 0, lty = 3)+
+  geom_point(size = 3, 
+             position = position_dodge(width = 0.2))+ # offset the points a little bit so not on top of eachother by month
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high), 
+                 height = 0.1, position = position_dodge(width = 0.2))+
+  labs(x = "Standardized Effect Size \n Gross Photosynthesis", 
+       y = "",
+       color = "")+
+  scale_alpha(range = c(0.3,1))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"))+
+  guides(alpha = "none")+ # don't show the alpha legend
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),# neeg ggtext loaded for this to work
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12))
+
+# patchwork guide = collect to show one legend
+```
+
+### GP without consumer model
+```{r gp-avg}
+summary(rwrespo_clean)
+
+# ok what if we averaged
+rwrespo_avg <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
+  summarize(
+    avg_gp = mean(GrossPhoto, na.rm = TRUE)  # calculate mean gp rate
+  )
+
+# getting temp diff
+rwrespoavgavg <- rwrespo_avg %>%
+  filter(experiment == "b") %>%
+  group_by(temp_treatment) %>%
+  summarize (avg_gp_temp = mean(avg_gp, na.rm = TRUE))
+
+# avg model
+avg_gp_model <- lm(avg_gp ~ pH * temp_treatment * experiment, data = rwrespo_avg)
+anova(avg_gp_model) # exp, ph x exp sig
+summary(avg_gp_model)
+
+# avg plot
+
+# predict using model
+rwrespo_clean <- rwrespo_clean %>%
+  mutate(predicted_gp = predict(avg_gp_model, newdata = rwrespo_clean))
+
+predictions <- predict(avg_gp_model, newdata = rwrespo_clean, interval = "confidence")
+
+# Add predictions and confidence intervals to calc_new
+rwrespo_clean <- rwrespo_clean %>%
+  mutate(predicted_gp = predictions[, "fit"],
+         lower_ci = predictions[, "lwr"],  # Lower confidence bound
+         upper_ci = predictions[, "upr"])  # Upper confidence bound
+
+# avg plot
+avggpplot <-
+rwrespo_clean %>%
+  ggplot(aes(x = pH, y = GrossPhoto, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
+  facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
+  geom_point(alpha = 0.1) + # raw data
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
+  geom_point(data = rwrespo_avg, aes(y = avg_gp), 
+             color = "black", size = 2, alpha = 0.8, shape = 21) +  
+  geom_line(aes(y = predicted_gp), size = 1.2) + # add model line
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 14)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+  labs(x = expression(pH[T]),
+       color = expression(paste("Temperature (",degree,"C)")),
+       fill = expression(paste("Temperature (",degree,"C)")),
+       y = expression(Gross~Photo~rate~(mu*mol~O[2]~g^-1~hr^-1)))
+```
+
+### Effect size plot (supplement)
+```{r rw-gp-plot-supp}
+rwrespo_avg_p <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment, predator) %>%  # group for predator vs control per tank
+  summarize(
+    avg_gp = mean(GrossPhoto, na.rm = TRUE),  # calculate mean GP rate
+    avg_respo = mean(Respiration, na.rm = TRUE)
+  )
+
+rwrespo_avg_p <- rwrespo_avg_p %>%
+  ungroup() %>%
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
+  mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
+         temp_scale = as.numeric(scale(temp_num)))
+
+# April - run your model on the scaled data for april
+rwmodel_gp_april <- lm(avg_gp ~ pH_scale * temp_scale * predator, data=rwrespo_avg_p %>% filter(experiment == "a"))
+#plot(tegmodel_res)
+anova(rwmodel_gp_april) # pH sig
+summary(rwmodel_gp_april)
+
+# May - again in may
+rwmodel_gp_may <- lm(avg_gp ~ pH_scale * temp_scale * predator, data=rwrespo_avg_p %>% filter(experiment == "b"))
+#plot(tegmodel_res)
+anova(rwmodel_gp_may) # pH sig, temp:predator sig
+summary(rwmodel_gp_may)
+
+
+### Extract the standardized effect sizes using the effectsize function from emmeans 
+
+std_coefs<-as_tibble(effectsize(rwmodel_gp_april)) %>% # get the effect sizes for april
+  mutate(month = "Early spring") %>% # add the month
+  left_join(tidy(rwmodel_gp_april) %>%
+              dplyr::select(Parameter = term, p.value)) %>% # bring in the p-values from the summary of the model 
+  bind_rows(as_tibble(effectsize(rwmodel_gp_may)) %>% # bind it to the same for May
+              mutate(month = "Late spring") %>%
+              left_join(tidy(rwmodel_gp_may) %>%
+                          dplyr::select(Parameter = term, p.value))) %>%
+  filter(Parameter != "(Intercept)") %>% # remove the intercepts for the STD Coef plot
+  mutate(Parameter = case_when(Parameter == "temp_scale" ~"Temperature",
+                               Parameter == "pH_scale" ~"pH",
+                               Parameter == "predatorp" ~"Consumer",
+                               Parameter == "pH_scale:temp_scale" ~"pH:Temperature",
+                               Parameter == "pH_scale:predatorp" ~"pH:Consumer",
+                               Parameter == "temp_scale:predatorp" ~"Temperature:Consumer",
+                               Parameter == "pH_scale:temp_scale:predatorp" ~
+                                            "Temperature:pH:Consumer"
+                               )) %>% # make names prettier
+  mutate(Parameter = factor(Parameter, levels = c("Temperature:pH:Consumer","pH:Consumer", 
+                                                  "Temperature:Consumer", "pH:Temperature",
+                                                  "Consumer","Temperature","pH"))) %>% 
+                                                    # put it in the order I want
+  mutate(significant = ifelse(p.value < 0.055, 1, 0.5)) # use this to change the alpha of points that are not significant
+
+
+# make a standardized effects plot
+rwgppredplot <-
+std_coefs %>%
+  ggplot(aes(x = Std_Coefficient, y = Parameter, color = month, alpha = significant))+
+  geom_vline(xintercept = 0, lty = 3)+
+  geom_point(size = 3, 
+             position = position_dodge(width = 0.2))+ # offset the points a little bit so not on top of eachother by month
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high), 
+                 height = 0.1, position = position_dodge(width = 0.2))+
+  labs(x = "Standardized Effect Size \n Gross Photosynthesis", 
+       y = "",
+       color = "")+
+  scale_alpha(range = c(0.3,1))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"))+
+  guides(alpha = "none")+ # don't show the alpha legend
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),# neeg ggtext loaded for this to work
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12))
+
+```
+
+## Respiration
+
+### Respiration with consumer
+```{r rw-respo}
+
+# calculate averages
+rwrespo_avg_p <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment, predator) %>%  # group by temp and pH
+  summarize(
+    avg_respo = mean(Respiration, na.rm = TRUE)  # calculate mean calc rate
+  )
+
+# avg model april
+avg_respo_model_april <- lm(avg_respo ~ pH * temp_treatment * predator, data = rwrespo_avg_p %>% filter(experiment == "a"))
+anova(avg_respo_model_april) # ph x temp sig
+summary(avg_respo_model_april)
+
+# avg model may
+avg_respo_model_may <- lm(avg_respo ~ pH * temp_treatment * predator, data = rwrespo_avg_p %>% filter(experiment == "b"))
+anova(avg_respo_model_may) # nothing
+summary(avg_respo_model_may)
+
+
+# avg model for plot
+avg_respo_model <- lm(avg_respo ~ pH * temp_treatment * experiment, data = rwrespo_avg_p)
+anova(avg_respo_model) # temp sig
+summary(avg_respo_model)
+
+# predict using model
+rwrespo_clean_plot <- rwrespo_clean %>%
+  mutate(predicted_respo = predict(avg_respo_model, newdata = rwrespo_clean))
+
+predictions <- predict(avg_respo_model, newdata = rwrespo_clean_plot, interval = "confidence")
+
+# Add predictions and confidence intervals to calc_new
+rwrespo_clean_plot <- rwrespo_clean %>%
+  mutate(predicted_respo = predictions[, "fit"],
+         lower_ci = predictions[, "lwr"],  # Lower confidence bound
+         upper_ci = predictions[, "upr"])  # Upper confidence bound
+
+# avg plot
+avgrwrespoplot <-
+rwrespo_clean_plot %>%
+  ggplot(aes(x = pH, y = Respiration, color = as.factor(temp_treatment), fill = as.factor(temp_treatment))) +
+  facet_wrap(~experiment, labeller = as_labeller(c("a" = "Early spring", "b" = "Late spring"))) +
+  geom_point(alpha = 0.1) + # raw data
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = as.factor(temp_treatment)), alpha = 0.3, color = NA) + # confidence interval
+  geom_point(data = rwrespo_avg_p, aes(y = avg_respo), 
+             color = "black", size = 2, alpha = 0.8, shape = 21) +  
+  geom_line(aes(y = predicted_respo), size = 1.2) + # add model line
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        text = element_text(size = 14)) +
+  scale_fill_manual(values = c("skyblue2", "firebrick1")) +
+  scale_color_manual(values = c("skyblue2", "firebrick1")) +
+  labs(x = expression(pH[T]),
+       color = expression(paste("Temperature (",degree,"C)")),
+       fill = expression(paste("Temperature (",degree,"C)")),
+       y = expression(Respiration~rate~(mu*mol~O[2]~g^-1~hr^-1)))
+```
+
+### Respo effect size plot
+```{r rw-respo-plot}
+rwrespo_avg <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment) %>%  # group by temp and pH
+  summarize(
+    avg_respo = mean(Respiration, na.rm = TRUE)  # calculate mean calc rate
+  ) %>%
+  ungroup() %>%
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
+  mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
+         temp_scale = as.numeric(scale(temp_num)))
+
+# April - run your model on the scaled data for april
+rwmodel_res_april <- lm(avg_respo ~ pH_scale * temp_scale, data=rwrespo_avg %>% filter(experiment == "a"))
+#plot(tegmodel_res)
+anova(rwmodel_res_april) # ph x temp sig
+summary(rwmodel_res_april)
+
+# May - again in may
+rwmodel_res_may <- lm(avg_respo ~ pH_scale * temp_scale, data=rwrespo_avg %>% filter(experiment == "b"))
+#plot(tegmodel_res)
+anova(rwmodel_res_may) # nothing sig
+summary(rwmodel_res_may)
+
+
+### Extract the standardized effect sizes using the effectsize function from emmeans (this is using cohens_d, I believe, which scales everything on 0 - 1)
+
+std_coefs<-as_tibble(effectsize(rwmodel_res_april)) %>% # get the effect sizes for april
+  mutate(month = "Early spring") %>% # add the month
+  left_join(tidy(rwmodel_res_april) %>%
+              dplyr::select(Parameter = term, p.value)) %>% # bring in the p-values from the summary of the model (which is now correct now that the values are standardized -- Note you STILL report the ANOVA results when talking about your significance in the model.  These p-values essentially tell you if the values are different or not from your intercept (essentiall 0))
+  bind_rows(as_tibble(effectsize(rwmodel_res_may)) %>% # bind it to the same for May
+              mutate(month = "Late spring") %>%
+              left_join(tidy(rwmodel_res_may) %>%
+                          dplyr::select(Parameter = term, p.value))) %>%
+  filter(Parameter != "(Intercept)") %>% # remove the intercepts for the STD Coef plot
+  mutate(Parameter = case_when(Parameter == "temp_scale" ~"Temperature",
+                               Parameter == "pH_scale" ~"pH",
+                               Parameter == "pH_scale:temp_scale"~"pH:Temperature")) %>% # make names prettier
+  mutate(Parameter = factor(Parameter, levels = c("pH:Temperature","Temperature","pH"))) %>% # put it in the order I want
+  mutate(significant = ifelse(p.value < 0.055, 1, 0.5)) # use this to change the alpha of points that are not significant
+
+
+# make a standardized effects plot. You will eventually bring these different ones together in patchwork like we talked about in person 
+rwrespoplot <-
+std_coefs %>%
+  ggplot(aes(x = Std_Coefficient, y = Parameter, color = month, alpha = significant))+
+  geom_vline(xintercept = 0, lty = 3)+
+  geom_point(size = 3, 
+             position = position_dodge(width = 0.2))+ # offset the points a little bit so not on top of eachother by month
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high), 
+                 height = 0.1, position = position_dodge(width = 0.2))+
+  labs(x = "Standardized Effect Size \n Respiration", 
+       y = "",
+       color = "")+
+  scale_alpha(range = c(0.3,1))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"))+
+  guides(alpha = "none")+ # don't show the alpha legend
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12))
+
+```
+
+### Respo effect sizes with consumer (supplement)
+```{r rw-respo-con-plot}
+rwrespo_avg_p <- rwrespo_clean %>%
+  group_by(pH, temp_treatment, experiment, predator) %>%  # group for consumer vs control per tank
+  summarize(
+    avg_gp = mean(GrossPhoto, na.rm = TRUE),  # calculate mean GP rate
+    avg_respo = mean(Respiration, na.rm = TRUE)
+  )
+
+rwrespo_avg_p <- rwrespo_avg_p %>%
+  ungroup() %>%
+  mutate(temp_num = as.numeric(as.character(temp_treatment))) %>% # make temp a number
+  mutate(pH_scale = as.numeric(scale(pH)), # scale the values so that you can calculated standardized effects
+         temp_scale = as.numeric(scale(temp_num)))
+
+# April - run your model on the scaled data for april
+rwmodel_resp_april <- lm(avg_respo ~ pH_scale * temp_scale * predator, data=rwrespo_avg_p %>% filter(experiment == "a"))
+#plot(tegmodel_res)
+anova(rwmodel_gp_april) # pH sig
+summary(rwmodel_gp_april)
+
+# May - again in may
+rwmodel_resp_may <- lm(avg_respo ~ pH_scale * temp_scale * predator, data=rwrespo_avg_p %>% filter(experiment == "b"))
+#plot(tegmodel_res)
+anova(rwmodel_gp_may) # pH sig, temp:predator sig
+summary(rwmodel_gp_may)
+
+
+### Extract the standardized effect sizes using the effectsize function from emmeans 
+
+std_coefs<-as_tibble(effectsize(rwmodel_resp_april)) %>% # get the effect sizes for april
+  mutate(month = "Early spring") %>% # add the month
+  left_join(tidy(rwmodel_resp_april) %>%
+              dplyr::select(Parameter = term, p.value)) %>% # bring in the p-values from the summary of the model (which is now correct now that the values are standardized -- Note you STILL report the ANOVA results when talking about your significance in the model.  These p-values essentially tell you if the values are different or not from your intercept (essentiall 0))
+  bind_rows(as_tibble(effectsize(rwmodel_resp_may)) %>% # bind it to the same for May
+              mutate(month = "Late spring") %>%
+              left_join(tidy(rwmodel_resp_may) %>%
+                          dplyr::select(Parameter = term, p.value))) %>%
+  filter(Parameter != "(Intercept)") %>% # remove the intercepts for the STD Coef plot
+  mutate(Parameter = case_when(Parameter == "temp_scale" ~"Temperature",
+                               Parameter == "pH_scale" ~"pH",
+                               Parameter == "predatorp" ~"Consumer",
+                               Parameter == "pH_scale:temp_scale" ~"pH:Temperature",
+                               Parameter == "pH_scale:predatorp" ~"pH:Consumer",
+                               Parameter == "temp_scale:predatorp" ~"Temperature:Consumer",
+                               Parameter == "pH_scale:temp_scale:predatorp" ~
+                                            "Temperature:pH:Consumer"
+                               )) %>% # make names prettier
+  mutate(Parameter = factor(Parameter, levels = c("Temperature:pH:Consumer","pH:Consumer", 
+                                                  "Temperature:Consumer", "pH:Temperature",
+                                                  "Consumer","Temperature","pH"))) %>% 
+                                                    # put it in the order I want
+  mutate(significant = ifelse(p.value < 0.055, 1, 0.5)) # use this to change the alpha of points that are not significant
+
+
+# make a standardized effects plot. You will eventually bring these different ones together in patchwork like we talked about in person
+rwrespopredplot <-
+std_coefs %>%
+  ggplot(aes(x = Std_Coefficient, y = Parameter, color = month, alpha = significant))+
+  geom_vline(xintercept = 0, lty = 3)+
+  geom_point(size = 3, 
+             position = position_dodge(width = 0.2))+ # offset the points a little bit so not on top of eachother by month
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high), 
+                 height = 0.1, position = position_dodge(width = 0.2))+
+  labs(x = "Standardized Effect Size \n Respiration", 
+       y = "",
+       color = "")+
+  scale_alpha(range = c(0.3,1))+
+  scale_color_manual(values = c("#540D6E", "#0EAD69"))+
+  guides(alpha = "none")+ # don't show the alpha legend
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),# neeg ggtext loaded for this to work
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12))
+
+# patchwork guide = collect to show one legend
+```
+
+# Patchworked Figures
+```{r patchwork-figs}
+# standardized effect size response plots
+(rwrespoplot + theme(plot.margin = unit(c(0,30,0,0), "pt"))) + rwgpplot + 
+  (tegrespoplot + theme(plot.margin = unit(c(0,30,0,0), "pt"))) + tegcalcplot + 
+  plot_layout(guides = "collect", axes = "collect_y")
+
+ggsave("effect sizes.png", path=here("Output"), width = 10, height = 8)
+
+# raw response plots
+avgrwrespoplot <-
+  avgrwrespoplot + 
+  scale_x_continuous(breaks = c(7.2, 7.6, 8.0))+
+  labs(y = expression(atop(Respiration~rate,(mu*mol~O[2]~g^-1~hr^-1))))
+
+avggpplot <-
+  avggpplot +
+  scale_x_continuous(breaks = c(7.2, 7.6, 8.0))+
+  labs(y = expression(atop(Gross~photosynthetic~rate,(mu*mol~O[2]~g^-1~hr^-1))))
+
+avgtegrespoplot <-
+  avgtegrespoplot +
+  scale_x_continuous(breaks = c(7.2, 7.6, 8.0))+
+  labs(y = expression(atop(Respiration~rate,(mu*mol~O[2]~g^-1~hr^-1))))
+
+avgcalcplot <-
+  avgcalcplot +
+  scale_x_continuous(breaks = c(7.2, 7.6, 8.0))+
+  labs(y = expression(atop(Calcification~rate,(mu*mol~CaCO[3]~g^-1~hr^-1))))
+
+avgrwrespoplot + avggpplot + avgtegrespoplot + avgcalcplot + plot_layout(guides = "collect", axes = "collect_x")
+
+#ggsave("raw responses.png", path=here("Output"), width = 10, height = 8)
+
+rwrespopredplot+ rwgppredplot + plot_layout(guides="collect", axes = "collect_y")
+
+#ggsave("predator effect size plots.png", path=here("Output"), width = 10, height = 4)
+
+```
+
