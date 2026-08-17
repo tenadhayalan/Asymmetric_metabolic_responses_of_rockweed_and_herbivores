@@ -44,7 +44,7 @@ interact in intertidal ecosystems under global change.
     * ph_temp_late_spring.csv (daily pH and temperature readings from experimental aquaria during the late spring experiment)
     * tris_cal_early_spring.csv (TRIS calibrations for pH determinations during early spring)
     * tris_cal_late_spring.csv (TRIS calibrations for pH determinations during late spring)
- * [PR](./PR)
+ * [PR](/Data/PR)
     * RawO2 (contains raw O2 files for all photosynthesis and respiration runs)
       * Rockweed
         * PI_curve
@@ -55,7 +55,7 @@ interact in intertidal ecosystems under global change.
     * Physiological_rates.csv (main experimental photosynthesis and respiration rates for rockweeds and snails)
     * PI_respo.csv (photosynthesis and respiration rates of rockweeds for photosynthesis-irradiance curve)
     * PIcurve_values.csv (calculated photosynthesis-irradiance equation values)
- * [TA](./TA)
+ * [TA](/Data/TA)
      * shell_runs (contains raw data and net calcification rates for blank shells)
      * titration_data (contains raw total alkalinity data)
     * RawO2 (contains raw O2 files for all photosynthesis and respiration runs)
