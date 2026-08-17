@@ -122,14 +122,14 @@ for (i in 1: length(file.names.full)) {
 #this allows me to not have to run the for loop again 
 write_csv(Respo.R, here("Data",
                         "PR_2024",
-                        "Respo_final_Teg.csv"))  
+                        "Respo_final.csv"))  
 ####----after loop----####
 Sample.Info <- read_csv(file = here("Data",
                                     "PR_2024",
                                     "Metadata_combined.csv"))
 Respo.R <- read_csv(here("Data",
                          "PR_2024",
-                         "Respo_final_clean_avg.csv"))  
+                         "Respo_final.csv"))  
 
 # Calculate Respiration rate
 
