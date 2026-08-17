@@ -14,8 +14,8 @@ library(patchwork)
 
 ## bring in pH and TA data
 
-april <- read.csv("Data/TA/April_background_TA.csv")
-may <- read.csv("Data/TA/May_background_TA.csv")
+april <- read.csv("Data/TA/background_TA_early_spring.csv")
+may <- read.csv("Data/TA/background_TA_late_spring.csv")
 
 # april
 aprilcarb <- carb(8, var1 = april$pH, var2 = april$TA, S = april$Salinity_lab, T = april$TempInSitu, pHscale = "T")
@@ -27,7 +27,7 @@ april %>%
   ggplot(aes(x = SampleID, y = pCO2, group = SampleID)) +
   geom_boxplot()
 
-write.csv(april, "Data/pH_temp/april_carb.csv")
+write.csv(april, "Data/pH_temp/carb_early_spring.csv")
 
 # may
 maycarb <- carb(8, var1 = may$pH, var2 = may$TA, S = may$Salinity_lab, T = may$TempInSitu, pHscale = "T")
@@ -39,4 +39,4 @@ may %>%
   ggplot(aes(x = SampleID, y = pCO2, group = SampleID)) +
   geom_boxplot()
 
-write.csv(may, "Data/pH_temp/may_carb.csv")
+write.csv(may, "Data/pH_temp/carb_late_spring.csv")
